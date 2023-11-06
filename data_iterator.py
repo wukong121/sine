@@ -2,6 +2,7 @@ import numpy
 import json
 import random
 import numpy as np
+from typing import *
 
 
 class DataIterator:
@@ -36,7 +37,7 @@ class DataIterator:
         return self.__next__()
 
     def read(self, source):
-        self.graph = {}
+        self.graph: Dict[int, List[Tuple[int, int, int]]] = {}
         self.users = set()
         self.items = set()
         line_cnt = 0
@@ -93,8 +94,8 @@ class DataIterator:
                 hist_mask_list.append([1.0] * self.maxlen)
             else:
                 # hist_item_list.append(item_list[:k] + [0] * (self.maxlen - k))
-                hist_item_list.append(item_[:k] + [0] * (self.maxlen - k))
-                hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k))
+                hist_item_list.append(item_[:k] + [0] * (self.maxlen - k)) # 前面k个item保留，后面不足maxlen的位置补0
+                hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k)) # 前面k个item的mask为1，后面不足maxlen的位置为0.0
         return np.array(hist_item_list), np.array(hist_mask_list), np.array(item_id_list)
 
 
