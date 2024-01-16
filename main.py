@@ -13,6 +13,7 @@ parser.add_argument('--gpu', type=str, default='0', help='book | taobao')
 parser.add_argument('--random_seed', type=int, default=19)
 parser.add_argument('--embedding_dim', type=int, default=128)
 parser.add_argument('--item_count', type=int, default=1000)
+parser.add_argument('--user_count', type=int, default=1000)
 parser.add_argument('--hidden_size', type=int, default=512)
 parser.add_argument('--category_num', type=int, default=2)
 parser.add_argument('--topic_num', type=int, default=10)
@@ -31,11 +32,12 @@ parser.add_argument('--user_norm', type=int, default=0)
 parser.add_argument('--item_norm', type=int, default=0)
 parser.add_argument('--cate_norm', type=int, default=0)
 parser.add_argument('--n_head', type=int, default=1)
+parser.add_argument('--output_size', type=int, default=64)
 
-def get_model(dataset, model_type, item_count, args):
+def get_model(dataset, model_type, item_count, user_count, args):
     if model_type == 'SINE':
-        model = Model_SINE(item_count, args.embedding_dim, args.hidden_size, args.batch_size,
-                           args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
+        model = Model_SINE(item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
+                           args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
                             args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     else:
         print("Invalid model_type : %s", model_type)
@@ -51,6 +53,7 @@ def train(train_file, valid_file, test_file, args):
     batch_size = args.batch_size
     maxlen = args.maxlen
     item_count = args.item_count
+    user_count = args.user_count
     model_type = args.model_type
     topic_num = args.topic_num
     concept_num = args.category_num
@@ -63,6 +66,11 @@ def train(train_file, valid_file, test_file, args):
     topk = [10, 50, 100]
     best_metric = 0
     best_metric_ndcg = 0
+    # summary_writer = tf.summary.create_file_writer("./log")
+    # tf.summary.trace_on(profiler=True)
+    summary_writer = tf.summary.FileWriter("./log")
+    # tf.summary.trace_on(profiler=True)
+    # tf.profiler.experimental.start('./log')
 
     best_epoch = 0
 
@@ -73,7 +81,7 @@ def train(train_file, valid_file, test_file, args):
         valid_data = DataIterator(valid_file, batch_size, maxlen, train_flag=1)
         test_data = DataIterator(test_file, batch_size, maxlen, train_flag=1)
         
-        model = get_model(dataset, model_type, item_count, args)
+        model = get_model(dataset, model_type, item_count, user_count, args)
         
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
@@ -101,6 +109,8 @@ def train(train_file, valid_file, test_file, args):
                 iter += 1
                 if iter % test_iter == 0:
                     print('--> Epoch {} / {} at iter {} loss {}'.format(epoch, args.epoch, iter, loss))
+                with summary_writer.as_default():
+                    tf.summary.scalar("loss", loss, step=iter+epoch*test_iter)
 
             metrics = evaluate_full(sess, valid_data, model, args.embedding_dim)
             for k in range(len(topk)):
@@ -189,10 +199,15 @@ if __name__ == '__main__':
         args.category_num = 2
         args.topic_num = 10
         args.item_count = 3706
+        args.user_count = 6040
         args.test_iter = 500
     elif args.dataset == 'book':
         path = './data/book/'
-        args.item_count = 367983
+        args.item_count = 367983    
+        args.test_iter = 1000
+    elif args.dataset == 'yzqytj':
+        path = './data/yzqytj/'
+        args.item_count = 286411
         args.test_iter = 1000
     
     train_file = path + args.dataset + '_train.txt'
