@@ -36,8 +36,6 @@ class Model(object):
         self.share_emb = share_emb
         self.item_norm = item_norm
         self.user_count = user_count
-        self.initializer_param = tf.random_uniform_initializer(minval=-np.sqrt(3 / embedding_dim),
-                                                               maxval=-np.sqrt(3 / embedding_dim))
         
         with tf.name_scope('Inputs'):
             self.i_ids = tf.placeholder(shape=[None], dtype=tf.int32)
@@ -60,22 +58,16 @@ class Model(object):
                 self.item_output_lookup = tf.get_variable("output_embedding_var", [n_mid, embedding_dim], trainable=True)
                 self.item_output_lookup_var = tf.get_variable("output_bias_lookup_table", [n_mid],
                                                              initializer=tf.zeros_initializer(), trainable=False)
-            
-            # Trainable的参数
             self.user_embedding_matrix = tf.get_variable('user_embedding_matrix', initializer=tf.zeros_initializer(),
-                                                     shape=[user_count, embedding_dim], trainable=True)  # 这里的initializer这样是否可以，还是说应该按照源代码来
-            self.the_first_w = tf.get_variable('the_first_w', initializer=self.initializer_param,
-                                           shape=[embedding_dim, embedding_dim])
-            self.the_first_bias = tf.get_variable('the_first_bias', initializer=self.initializer_param,
-                                              shape=[embedding_dim])
+                                                     shape=[user_count, embedding_dim])
+            
 
         emb = tf.nn.embedding_lookup(self.item_input_lookup,
                                      tf.reshape(self.item, [-1]))
-        self.item_emb = tf.reshape(emb, [-1, self.hist_max, self.dim])  # ?*20*128
+        self.item_emb = tf.reshape(emb, [-1, self.hist_max, self.dim])
         self.mask_length = tf.cast(tf.reduce_sum(self.nbr_mask, -1), dtype=tf.int32)
 
-        self.user_embedding = tf.nn.embedding_lookup(self.user_embedding_matrix, self.user_id)  # ?*128
-        # print("user_embedding的维度是：", self.user_embedding.shape)
+        self.user_embedding = tf.nn.embedding_lookup(self.user_embedding_matrix, self.user_id)
         self.item_output_emb = self.output_item2()
 
     def output_item2(self):
@@ -128,12 +120,11 @@ class Model(object):
 
         return loss
 
-    def train(self, sess, hist_item, nbr_mask, i_ids, user_id):
+    def train(self, sess, hist_item, nbr_mask, i_ids):
         feed_dict = {
             self.i_ids: i_ids,
             self.item: hist_item,
-            self.nbr_mask: nbr_mask,
-            self.user_id: user_id
+            self.nbr_mask: nbr_mask
         }
         loss, _ = sess.run([self.loss, self.optimizer], feed_dict=feed_dict)
         return loss
@@ -143,11 +134,10 @@ class Model(object):
         # item_embs = sess.run(self.item_output_lookup)
         return item_embs
 
-    def output_user(self, sess, hist_item, nbr_mask, user_id):
+    def output_user(self, sess, hist_item, nbr_mask):
         user_embs = sess.run(self.user_eb, feed_dict={
             self.item: hist_item,
-            self.nbr_mask: nbr_mask,
-            self.user_id: user_id
+            self.nbr_mask: nbr_mask
         })
         return user_embs
     
@@ -494,22 +484,18 @@ class Model_SINE(Model):
                     shape=[self.num_topic, self.dim],
                     name='topic_embedding')
 
-        self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)  # ?,2,128
-        # print("seq_multi的维度是：", self.seq_multi.shape)
-        self.user_eb = self.labeled_attention(self.seq_multi)  # ?*128
-        # print("user_eb的维度是：", self.user_eb.shape)
-        self.long_user_embedding = self.attention_level_one(self.user_embedding, self.item_emb,
-                                                            self.the_first_w, self.the_first_bias)  # (128,)  why is this
-        # print("long_user_embedding的维度是：", self.long_user_embedding.shape)
+        self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)
+        self.user_eb = self.labeled_attention(self.seq_multi)
+        self.long_user_embedding = self.attention_level_one(self.user_embedding, self.pre_sessions_embedding,
+                                                            self.the_first_w, self.the_first_bias)
         self.output_units = output_size
 
 
-        gate_input = concat_func([self.user_eb, self.long_user_embedding, self.user_embedding])  # 20*256
-        # print("gate_input的维度是：", gate_input.shape)
+        gate_input = concat_func([self.user_eb, self.long_user_embedding])
         gate = Dense(self.output_units, activation='sigmoid')(gate_input)
-        # print("gate的维度：", gate.shape)
-        self.user_eb = tf.multiply(gate, self.user_eb) + tf.multiply(1 - gate, self.long_user_embedding)
-        # self.user_eb = tf.squeeze(self.user_eb, 1)
+        self.user_eb = Lambda(lambda x: tf.multiply(x[0], x[1]) + tf.multiply(1 - x[0], x[2]))(
+            [gate, self.user_eb, self.long_user_embedding])
+        self.user_eb = Lambda(lambda x: tf.squeeze(x, 1))(self.user_eb)
         self.user_eb = self.l2_normalize(self.user_eb)
 
         self._xent_loss_weight(self.user_eb, self.seq_multi)
@@ -518,16 +504,12 @@ class Model_SINE(Model):
         return Lambda(lambda x: tf.nn.l2_normalize(x, axis))(x)
     
 
-    def attention_level_one(self, user_embedding, item_emb, the_first_w, the_first_bias):
-        print("user_embedding的维度是：", user_embedding.shape)  # [?,128]
-        user_embedding_expanded = tf.expand_dims(user_embedding, axis=1)  # [n,1,128]，转置后变成[n,128,1]
-        print("user_embedding_expanded的维度是：", user_embedding_expanded.shape)
-        weight = tf.nn.softmax(tf.transpose(tf.matmul(
-            tf.sigmoid(tf.add(tf.matmul(item_emb, the_first_w), the_first_bias)),
-            tf.transpose(user_embedding_expanded, perm=[0,2,1])), perm=[0,2,1]))  # [n,1,20]
-        print("weight的维度是：", weight.shape)
-        out = tf.reduce_sum(tf.multiply(item_emb, tf.transpose(weight, perm=[0,2,1])), axis=1)  # reduce_sum([n,20,128]multiply[n,20,1])---[n,128]
-        return tf.reshape(out, [-1, self.dim])
+    def attention_level_one(self, user_embedding, pre_sessions_embedding, the_first_w, the_first_bias):
+        weight = tf.nn.softmax(tf.transpose(tf.matmul(tf.sigmoid(
+            tf.add(tf.matmul(pre_sessions_embedding, the_first_w), the_first_bias)), tf.transpose(user_embedding))))
+
+        out = tf.reduce_sum(tf.multiply(pre_sessions_embedding, tf.transpose(weight)), axis=0)
+        return out
     
     def sequence_encode_concept(self, item_emb, nbr_mask):
 
@@ -632,7 +614,7 @@ class Model_SINE(Model):
         return cate_dist
 
     def sequence_encode_cpt(self, items, nbr_mask):
-        item_emb_input = tf.reshape(items, [-1, self.dim])  # N,D
+        item_emb_input = tf.reshape(items, [-1, self.dim])
         # self.cate_dist = tf.reshape(self.seq_cate_dist(self.item_emb), [-1, self.category_num, self.hist_max])
         self.cate_dist = tf.transpose(tf.reshape(self.seq_cate_dist(item_emb_input), [-1, self.hist_max, self.category_num]), [0, 2, 1])
         item_list_emb = tf.reshape(item_emb_input, [-1, self.hist_max, self.dim])
@@ -674,7 +656,7 @@ class Model_SINE(Model):
             else:
                 seq = category_embedding_mat
             self.category_embedding_mat = seq
-            seq = tf.reshape(seq, [-1, self.category_num, self.dim])  # ?,2,128
+            seq = tf.reshape(seq, [-1, self.category_num, self.dim])
 
         return seq
 

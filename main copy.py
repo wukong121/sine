@@ -32,7 +32,7 @@ parser.add_argument('--user_norm', type=int, default=0)
 parser.add_argument('--item_norm', type=int, default=0)
 parser.add_argument('--cate_norm', type=int, default=0)
 parser.add_argument('--n_head', type=int, default=1)
-parser.add_argument('--output_size', type=int, default=128)
+parser.add_argument('--output_size', type=int, default=64)
 
 def get_model(dataset, model_type, item_count, user_count, args):
     if model_type == 'SINE':
@@ -66,8 +66,8 @@ def train(train_file, valid_file, test_file, args):
     topk = [10, 50, 100]
     best_metric = 0
     best_metric_ndcg = 0
-    
-    # summary_writer = tf.summary.FileWriter("./log")
+    summary_writer = tf.summary.create_file_writer("./log")
+    tf.summary.trace_on(profiler=True)
 
     best_epoch = 0
 
@@ -93,7 +93,7 @@ def train(train_file, valid_file, test_file, args):
             start_time = time.time()
             while True:
                 try:
-                    hist_item, nbr_mask, i_ids, user_id = train_data.next()
+                    hist_item, nbr_mask, i_ids = train_data.next()
                 except StopIteration:
                     metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
                     for k in range(len(topk)):
@@ -101,13 +101,13 @@ def train(train_file, valid_file, test_file, args):
                                                                                        metrics['ndcg'][k]))
                     break
 
-                loss = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
+                loss = model.train(sess, hist_item, nbr_mask, i_ids)
                 loss_iter += loss
                 iter += 1
                 if iter % test_iter == 0:
                     print('--> Epoch {} / {} at iter {} loss {}'.format(epoch, args.epoch, iter, loss))
-                # with summary_writer.as_default():
-                #     tf.summary.scalar("loss", loss, step=iter+epoch*test_iter)
+                with summary_writer.as_default():
+                    tf.summary.scalar("loss", loss, step=iter+epoch*test_iter)
 
             metrics = evaluate_full(sess, valid_data, model, args.embedding_dim)
             for k in range(len(topk)):
@@ -141,7 +141,6 @@ def test(train_file, valid_file, test_file, args):
     batch_size = args.batch_size
     maxlen = args.maxlen
     item_count = args.item_count
-    user_count = args.user_count
     model_type = args.model_type
     topic_num = args.topic_num
     concept_num = args.category_num
@@ -156,7 +155,7 @@ def test(train_file, valid_file, test_file, args):
                       + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm\
                       + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha)
     gpu_options = tf.GPUOptions(allow_growth=True)
-    model = get_model(dataset, model_type, item_count, user_count, args)
+    model = get_model(dataset, model_type, item_count, args)
     print('---> Start testing...')
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
@@ -191,7 +190,6 @@ if __name__ == '__main__':
     if args.dataset == 'taobao':
         path = './data/taobao/'
         args.item_count = 1708531
-        args.user_count = 976780
         args.test_iter = 1000
     if args.dataset == 'ml1m':
         path = './data/ml1m/'
@@ -202,12 +200,10 @@ if __name__ == '__main__':
         args.test_iter = 500
     elif args.dataset == 'book':
         path = './data/book/'
-        args.user_count = 603669
         args.item_count = 367983    
         args.test_iter = 1000
     elif args.dataset == 'yzqytj':
         path = './data/yzqytj/'
-        args.user_count = 300890
         args.item_count = 286411
         args.test_iter = 1000
     
