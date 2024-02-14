@@ -1,7 +1,7 @@
 import random
 import argparse
-from data_iterator import DataIterator
-from model import *
+from SINE.data_iterator_li import DataIterator
+from SINE.model_li import *
 from metrics_rs import evaluate_full
 
 parser = argparse.ArgumentParser()

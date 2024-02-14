@@ -2,8 +2,8 @@ import argparse
 import random
 import time
 
-from data_iterator import DataIterator
-from model import *
+from SINE.data_iterator_li import DataIterator
+from SINE.model_li import *
 from metrics_rs import evaluate_full
 
 parser = argparse.ArgumentParser()
@@ -93,7 +93,7 @@ def train(train_file, valid_file, test_file, args):
             start_time = time.time()
             while True:
                 try:
-                    hist_item, nbr_mask, i_ids, user_id = train_data.next()
+                    hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment = train_data.next()
                 except StopIteration:
                     metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
                     for k in range(len(topk)):
@@ -101,7 +101,7 @@ def train(train_file, valid_file, test_file, args):
                                                                                        metrics['ndcg'][k]))
                     break
 
-                loss = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
+                loss = model.train(sess, hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment)
                 loss_iter += loss
                 iter += 1
                 if iter % test_iter == 0:
