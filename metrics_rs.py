@@ -6,6 +6,8 @@ import faiss
 from sklearn import metrics
 import multiprocessing as mp
 import time
+from model_li import Model_SINE_LI
+from model_ssl import Model_SINE_SSL
 
 
 def recall(rank, ground_truth, N):
@@ -455,7 +457,7 @@ def evaluation(input_data, train_label_dict, test_label_dict,
         print('\n topk={} recall={} ndcg={} auc={} precision={} f1={}'.format(topk[k], recall_[k], ndcg[k], auc, precision[k], f1[k]))
 
 
-def evaluate_full(sess, test_data, model, dim):
+def evaluate_full(sess, test_data, model: Model_SINE_SSL | Model_SINE_LI, dim):
     topN = 100
     topk = [50, 100]
     if mp.cpu_count() > 4:
@@ -476,11 +478,14 @@ def evaluate_full(sess, test_data, model, dim):
 
     while True:
         try:
-            hist_item, nbr_mask, i_ids, user_id = test_data.next()  # 获取测试数据
+            hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment = test_data.next()  # 获取测试数据
         except StopIteration:
             break
         t1 = time.time()
-        user_embs = model.output_user(sess, hist_item, nbr_mask, user_id)  # 获取用户的嵌入表示
+        if type(model) == Model_SINE_LI:
+            user_embs = model.output_user(sess, hist_item, nbr_mask, user_id)  # 获取用户的嵌入表示
+        else:
+            user_embs = model.output_user(sess, hist_item, nbr_mask)
         t2 = time.time()
         inference_time.append(t2 - t1)
         if len(user_embs.shape) == 2:
