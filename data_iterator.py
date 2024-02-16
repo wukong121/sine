@@ -1,7 +1,6 @@
-import numpy
-import json
 import random
 import numpy as np
+from data_augmentation import *
 from typing import *
 
 
@@ -54,14 +53,14 @@ class DataIterator:
                 self.graph[user_id].append((user_id, item_id, time_stamp))
                 line_cnt += 1
         for user_id, value in self.graph.items():
-            value.sort(key=lambda x: x[2])
+            value.sort(key=lambda x: x[2])  # 按时间戳排序
             self.edges.extend(value[3:])
-            self.graph[user_id] = [(usr_, itm_, time_) for usr_, itm_, time_ in value]
+            self.graph[user_id] = [(usr_, itm_, time_) for usr_, itm_, time_ in value]  # 把排序和截断好的数据重新赋值给user_id
         self.edge_count = len(self.edges)
     
     def __next__(self):
         item_time_list = []
-        if self.train_flag == 0:
+        if self.train_flag == 0:  # 训练模式
             if self.index + self.eval_batch_size > self.edge_count:
                 self.index = 0
                 self._shuffle()
@@ -69,25 +68,26 @@ class DataIterator:
             edges_list = self.edges[self.index: self.index+self.eval_batch_size]
             self.index += self.eval_batch_size
             user_id_list, item_id_list, item_time_list = zip(*edges_list)
-        else:
+        else:  # 测试模式
             total_user = len(self.users)
             if self.index > total_user:
                 self.index = 0
                 raise StopIteration
             end_ = min(self.index + self.eval_batch_size, total_user)
             user_id_list = self.users[self.index: end_]
-            item_id_list = [self.graph[user_][-1][1] for user_ in user_id_list]
+            item_id_list = [self.graph[user_][-1][1] for user_ in user_id_list]  # 获取每个用户最后交互过的那个物品
             self.index += self.eval_batch_size
 
         # item_id_list = []
         hist_item_list = []
         hist_mask_list = []
         for i, user_id in enumerate(user_id_list):
-            item_list = self.graph[user_id]
+            item_list = self.graph[user_id]   # item_list其实是u,i,t的元组
             item_ = [_item[1] for _item in item_list]
-            if self.train_flag == 0:
+            # k是指历史序列的截取位置
+            if self.train_flag == 0:  # 训练模式
                 k = item_list.index((user_id_list[i], item_id_list[i], item_time_list[i]))
-            else:
+            else:  # 测试模式
                 k = item_list.index(item_list[-1])
             if k >= self.maxlen:
                 hist_item_list.append(item_[k-self.maxlen: k])
@@ -95,8 +95,17 @@ class DataIterator:
             else:
                 # hist_item_list.append(item_list[:k] + [0] * (self.maxlen - k))
                 hist_item_list.append(item_[:k] + [0] * (self.maxlen - k)) # 前面k个item保留，后面不足maxlen的位置补0
-                hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k)) # 前面k个item的mask为1，后面不足maxlen的位置为0.0
-        return np.array(hist_item_list), np.array(hist_mask_list), np.array(item_id_list)
+                hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k))  # 前面k个item的mask为1，后面不足maxlen的位置为0.0
+        
+        mask, reorder = Mask(), Reorder()
+        hist_item_list_mask = [mask(seq) for seq in hist_item_list]
+        hist_item_list_reorder = [reorder(seq) for seq in hist_item_list]
+
+        hist_item_list_augment = []
+        hist_item_list_augment.append(hist_item_list_mask)
+        hist_item_list_augment.append(hist_item_list_reorder)
+
+        return np.array(hist_item_list), np.array(hist_mask_list), np.array(item_id_list), np.array(user_id_list), np.array(hist_item_list_augment)
 
 
 class LargeDataIterator:

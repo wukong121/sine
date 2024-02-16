@@ -1,9 +1,13 @@
 import argparse
 import random
 import time
+import os
+import tensorflow as tf
+import numpy as np
 
 from data_iterator import DataIterator
-from model import *
+from model_li import Model_SINE_LI
+from model_ssl import Model_SINE_SSL
 from metrics_rs import evaluate_full
 
 parser = argparse.ArgumentParser()
@@ -13,6 +17,7 @@ parser.add_argument('--gpu', type=str, default='0', help='book | taobao')
 parser.add_argument('--random_seed', type=int, default=19)
 parser.add_argument('--embedding_dim', type=int, default=128)
 parser.add_argument('--item_count', type=int, default=1000)
+parser.add_argument('--user_count', type=int, default=1000)
 parser.add_argument('--hidden_size', type=int, default=512)
 parser.add_argument('--category_num', type=int, default=2)
 parser.add_argument('--topic_num', type=int, default=10)
@@ -31,15 +36,22 @@ parser.add_argument('--user_norm', type=int, default=0)
 parser.add_argument('--item_norm', type=int, default=0)
 parser.add_argument('--cate_norm', type=int, default=0)
 parser.add_argument('--n_head', type=int, default=1)
+parser.add_argument('--output_size', type=int, default=128)
+parser.add_argument('--experiment', type=int, default=0, help="0 for Long-Intent, 1 for Self-supervised Learning")
+parser.add_argument('--temperature', type=float, default=1.0, help="softmax temperature (default:  1.0) - not studied.")
 
-def get_model(dataset, model_type, item_count, args):
-    if model_type == 'SINE':
-        model = Model_SINE(item_count, args.embedding_dim, args.hidden_size, args.batch_size,
-                           args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
-                            args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
-    else:
+def get_model(dataset, model_type, item_count, user_count, args):
+    if not model_type == 'SINE':
         print("Invalid model_type : %s", model_type)
         return
+    if args.experiment == 0:
+        model = Model_SINE_LI(item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
+                        args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
+                        args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+    else:
+        model = Model_SINE_SSL(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
+                               args.topic_num, args.category_num, args.alpha, args.neg_num, args.cpt_feat, 
+                               args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     return model
 
 def get_exp_name(dataset, model_type, topic_num, concept_num, maxlen, save=True):
@@ -51,6 +63,7 @@ def train(train_file, valid_file, test_file, args):
     batch_size = args.batch_size
     maxlen = args.maxlen
     item_count = args.item_count
+    user_count = args.user_count
     model_type = args.model_type
     topic_num = args.topic_num
     concept_num = args.category_num
@@ -63,6 +76,8 @@ def train(train_file, valid_file, test_file, args):
     topk = [10, 50, 100]
     best_metric = 0
     best_metric_ndcg = 0
+    
+    # summary_writer = tf.summary.FileWriter("./log")
 
     best_epoch = 0
 
@@ -73,7 +88,7 @@ def train(train_file, valid_file, test_file, args):
         valid_data = DataIterator(valid_file, batch_size, maxlen, train_flag=1)
         test_data = DataIterator(test_file, batch_size, maxlen, train_flag=1)
         
-        model = get_model(dataset, model_type, item_count, args)
+        model = get_model(dataset, model_type, item_count, user_count, args)
         
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
@@ -88,20 +103,24 @@ def train(train_file, valid_file, test_file, args):
             start_time = time.time()
             while True:
                 try:
-                    hist_item, nbr_mask, i_ids = train_data.next()
+                    hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment = train_data.next()
                 except StopIteration:
                     metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
                     for k in range(len(topk)):
                         print('!!!! Test result epoch %d topk=%d hitrate=%.4f ndcg=%.4f' % (epoch, topk[k], metrics['hitrate'][k],
-                                                                                       metrics['ndcg'][k]))
+                                                                                    metrics['ndcg'][k]))
                     break
-
-                loss = model.train(sess, hist_item, nbr_mask, i_ids)
+                if args.experiment == 0:
+                    loss = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
+                else:
+                    loss = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
                 loss_iter += loss
                 iter += 1
                 if iter % test_iter == 0:
                     print('--> Epoch {} / {} at iter {} loss {}'.format(epoch, args.epoch, iter, loss))
-
+                # with summary_writer.as_default():
+                #     tf.summary.scalar("loss", loss, step=iter+epoch*test_iter)
+                
             metrics = evaluate_full(sess, valid_data, model, args.embedding_dim)
             for k in range(len(topk)):
                 print('!!!! Validate result topk=%d hitrate=%.4f ndcg=%.4f' % (topk[k], metrics['hitrate'][k],
@@ -134,6 +153,7 @@ def test(train_file, valid_file, test_file, args):
     batch_size = args.batch_size
     maxlen = args.maxlen
     item_count = args.item_count
+    user_count = args.user_count
     model_type = args.model_type
     topic_num = args.topic_num
     concept_num = args.category_num
@@ -148,12 +168,12 @@ def test(train_file, valid_file, test_file, args):
                       + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm\
                       + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha)
     gpu_options = tf.GPUOptions(allow_growth=True)
-    model = get_model(dataset, model_type, item_count, args)
+    model = get_model(dataset, model_type, item_count, user_count, args)
     print('---> Start testing...')
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         model.restore(sess, best_model_path)
-        
+
         test_data = DataIterator(test_file, batch_size, maxlen, train_flag=1)
 
         metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
@@ -183,16 +203,24 @@ if __name__ == '__main__':
     if args.dataset == 'taobao':
         path = './data/taobao/'
         args.item_count = 1708531
+        args.user_count = 976780
         args.test_iter = 1000
     if args.dataset == 'ml1m':
         path = './data/ml1m/'
         args.category_num = 2
         args.topic_num = 10
         args.item_count = 3706
+        args.user_count = 6040
         args.test_iter = 500
     elif args.dataset == 'book':
         path = './data/book/'
-        args.item_count = 367983
+        args.user_count = 603669
+        args.item_count = 367983    
+        args.test_iter = 1000
+    elif args.dataset == 'yzqytj':
+        path = './data/yzqytj/'
+        args.user_count = 300890
+        args.item_count = 286411
         args.test_iter = 1000
     
     train_file = path + args.dataset + '_train.txt'

@@ -6,6 +6,8 @@ import faiss
 from sklearn import metrics
 import multiprocessing as mp
 import time
+from model_li import Model_SINE_LI
+from model_ssl import Model_SINE_SSL
 
 
 def recall(rank, ground_truth, N):
@@ -464,10 +466,10 @@ def evaluate_full(sess, test_data, model, dim):
         cores = 1
     pool = mp.Pool(cores)
 
-    item_embs = model.output_item(sess)
+    item_embs = model.output_item(sess)  # 获取物品的嵌入表示
     # item_embs = model.output_item2(sess)
     index = faiss.IndexFlatIP(dim)
-    index.add(item_embs)
+    index.add(item_embs)  # 构建Faiss索引
 
     total_ndcg = []
     total_hitrate = []
@@ -476,15 +478,18 @@ def evaluate_full(sess, test_data, model, dim):
 
     while True:
         try:
-            hist_item, nbr_mask, i_ids = test_data.next()
+            hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment = test_data.next()  # 获取测试数据
         except StopIteration:
             break
         t1 = time.time()
-        user_embs = model.output_user(sess, hist_item, nbr_mask)
+        if type(model) == Model_SINE_LI:
+            user_embs = model.output_user(sess, hist_item, nbr_mask, user_id)  # 获取用户的嵌入表示
+        else:
+            user_embs = model.output_user(sess, hist_item, nbr_mask)
         t2 = time.time()
         inference_time.append(t2 - t1)
         if len(user_embs.shape) == 2:
-            D, recalled = index.search(user_embs, topN)
+            D, recalled = index.search(user_embs, topN)  #根据用户嵌入表示进行最近邻检索
             target_ids = [[i] for i in i_ids]
             results_ = [
                 pool.apply(evaluate_embedding_gmnn, args=(recalled[i], iid_list)) for i, iid_list in enumerate(target_ids)]
