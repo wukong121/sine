@@ -4,6 +4,7 @@ import json
 import random
 from collections import defaultdict
 import pandas as pd
+from typing import *
 
 random.seed(1230)
 
@@ -14,8 +15,8 @@ if len(sys.argv) > 1:
 if len(sys.argv) > 2:
     filter_size = int(sys.argv[2])
 
-users = defaultdict(list)
-item_count = defaultdict(int)
+users: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
+item_count: Dict[int, int] = defaultdict(int)
 def read_from_amazon(source):
     with open(source, 'r') as f:
         for line in f:
@@ -36,7 +37,7 @@ def read_from_taobao(source):
             if conts[3] != 'pv':
                 continue
             item_count[iid] += 1
-            ts = int(conts[4])
+            ts = int(conts[4]) # click_time
             users[uid].append((iid, ts))
 
 
@@ -75,11 +76,13 @@ elif name == 'ml1m1':
     read_movielens_ratings('ratings.dat')
     
 
+# sort by item occurrence number
 items = list(item_count.items())
 # 按照item交易的频次进行降序排列
 items.sort(key=lambda x:x[1], reverse=True)
 
-# 筛选掉交易频次低于5次的物品
+
+# filter down to occurrence less than 5
 item_total = 0
 for index, (iid, num) in enumerate(items):
     if num >= filter_size:
@@ -87,12 +90,13 @@ for index, (iid, num) in enumerate(items):
     else:
         break
 
-item_map = dict(zip([items[i][0] for i in range(item_total)], list(range(0, item_total))))
+# item_map: Dict[itemId: int, index: int]
+item_map: Dict[int, int] = dict(zip([items[i][0] for i in range(item_total)], list(range(0, item_total))))
 
 user_ids = list(users.keys())
-filter_user_ids = []
+filter_user_ids: List[int] = []
 for user in user_ids:
-    item_list = users[user]
+    item_list: List[Tuple[int, int]] = users[user]
     index = 0
     for item, timestamp in item_list:
         # 计算该用户的物品中有多少个在 item_map 中存在的物品
@@ -107,13 +111,13 @@ user_ids = filter_user_ids
 num_users = len(user_ids)
 user_map = dict(zip(user_ids, list(range(num_users))))
 
-def export_map(name, map_dict):
+def export_map(name: str, map_dict: Dict[str, int]) -> None:
     with open(name, 'w') as f:
         for key, value in map_dict.items():
             f.write('%s,%d\n' % (key, value))
 
 
-def export_data(name, user_list, max_time=2):
+def export_data(name: str, user_list: List[int], max_time=2) -> int:
     total_data = 0
     with open(name, 'w') as f:
         for user in user_list:

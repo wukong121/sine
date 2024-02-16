@@ -1,6 +1,8 @@
 import random
 import numpy as np
 from data_augmentation import *
+from typing import *
+
 
 class DataIterator:
 
@@ -34,7 +36,7 @@ class DataIterator:
         return self.__next__()
 
     def read(self, source):
-        self.graph = {}
+        self.graph: Dict[int, List[Tuple[int, int, int]]] = {}
         self.users = set()
         self.items = set()
         line_cnt = 0
@@ -92,8 +94,8 @@ class DataIterator:
                 hist_mask_list.append([1.0] * self.maxlen)
             else:
                 # hist_item_list.append(item_list[:k] + [0] * (self.maxlen - k))
-                hist_item_list.append(item_[:k] + [0] * (self.maxlen - k))
-                hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k))  # 如果k小于self.maxlen，则在前面用0填充
+                hist_item_list.append(item_[:k] + [0] * (self.maxlen - k)) # 前面k个item保留，后面不足maxlen的位置补0
+                hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k))  # 前面k个item的mask为1，后面不足maxlen的位置为0.0
         
         mask, reorder = Mask(), Reorder()
         hist_item_list_mask = [mask(seq) for seq in hist_item_list]
