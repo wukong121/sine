@@ -1,4 +1,3 @@
-import os
 import numpy as np
 from deepctr.feature_column import concat_func
 import tensorflow as tf
@@ -468,10 +467,10 @@ class PrototypicalDispatcher(object):
         return y  # [B,H]
 
 
-class Model_SINE(Model):
+class Model_SINE_LI(Model):
     def __init__(self, n_mid, user_count, embedding_dim, hidden_size, output_size, batch_size, seq_len, topic_num, category_num, alpha,
                  neg_num, cpt_feat, user_norm, item_norm, cate_norm, n_head):
-        super(Model_SINE, self).__init__(n_mid, user_count, embedding_dim, hidden_size, output_size, batch_size, seq_len, 
+        super(Model_SINE_LI, self).__init__(n_mid, user_count, embedding_dim, hidden_size, output_size, batch_size, seq_len, 
                                          flag="SINE", item_norm=item_norm)
         self.num_topic = topic_num
         self.category_num = category_num

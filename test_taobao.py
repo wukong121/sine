@@ -1,6 +1,7 @@
 import random
 import argparse
-from SINE.data_iterator_li import DataIterator
+import os
+from SINE.data_iterator import DataIterator
 from SINE.model_li import *
 from metrics_rs import evaluate_full
 
@@ -34,7 +35,7 @@ parser.add_argument('--output_size', type=int, default=128)
 
 def get_model(dataset, model_type, item_count, user_count, args):
     if model_type == 'SINE':
-        model = Model_SINE(item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
+        model = Model_SINE_LI(item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
                            args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
                             args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     else:

@@ -5,9 +5,9 @@ import os
 import tensorflow as tf
 import numpy as np
 
-from SINE.data_iterator import DataIterator
-from SINE.model_li import Model_SINE_LI
-from SINE.model_ssl import Model_SINE_SSL
+from data_iterator import DataIterator
+from model_li import Model_SINE_LI
+from model_ssl import Model_SINE_SSL
 from metrics_rs import evaluate_full
 
 parser = argparse.ArgumentParser()
@@ -38,6 +38,7 @@ parser.add_argument('--cate_norm', type=int, default=0)
 parser.add_argument('--n_head', type=int, default=1)
 parser.add_argument('--output_size', type=int, default=128)
 parser.add_argument('--experiment', type=int, default=0, help="0 for Long-Intent, 1 for Self-supervised Learning")
+parser.add_argument('--temperature', type=float, default=1.0, help="softmax temperature (default:  1.0) - not studied.")
 
 def get_model(dataset, model_type, item_count, user_count, args):
     if not model_type == 'SINE':
@@ -48,9 +49,9 @@ def get_model(dataset, model_type, item_count, user_count, args):
                         args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
                         args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     else:
-        model = Model_SINE_SSL(item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
-                        args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
-                        args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+        model = Model_SINE_SSL(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
+                               args.topic_num, args.category_num, args.alpha, args.neg_num, args.cpt_feat, 
+                               args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     return model
 
 def get_exp_name(dataset, model_type, topic_num, concept_num, maxlen, save=True):
@@ -109,16 +110,16 @@ def train(train_file, valid_file, test_file, args):
                         print('!!!! Test result epoch %d topk=%d hitrate=%.4f ndcg=%.4f' % (epoch, topk[k], metrics['hitrate'][k],
                                                                                     metrics['ndcg'][k]))
                     break
-            if args.experiment == 0:
-                loss = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
-            else:
-                loss = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
-            loss_iter += loss
-            iter += 1
-            if iter % test_iter == 0:
-                print('--> Epoch {} / {} at iter {} loss {}'.format(epoch, args.epoch, iter, loss))
-            # with summary_writer.as_default():
-            #     tf.summary.scalar("loss", loss, step=iter+epoch*test_iter)
+                if args.experiment == 0:
+                    loss = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
+                else:
+                    loss = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
+                loss_iter += loss
+                iter += 1
+                if iter % test_iter == 0:
+                    print('--> Epoch {} / {} at iter {} loss {}'.format(epoch, args.epoch, iter, loss))
+                # with summary_writer.as_default():
+                #     tf.summary.scalar("loss", loss, step=iter+epoch*test_iter)
                 
             metrics = evaluate_full(sess, valid_data, model, args.embedding_dim)
             for k in range(len(topk)):

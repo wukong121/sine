@@ -1,5 +1,3 @@
-import numpy
-import json
 import random
 import numpy as np
 from data_augmentation import *
@@ -97,12 +95,13 @@ class DataIterator:
                 hist_item_list.append(item_[:k] + [0] * (self.maxlen - k))
                 hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k))  # 如果k小于self.maxlen，则在前面用0填充
         
-        hist_item_list_mask = Mask(hist_item_list)
-        hist_item_list_substitute = Substitute(hist_item_list)
+        mask, reorder = Mask(), Reorder()
+        hist_item_list_mask = [mask(seq) for seq in hist_item_list]
+        hist_item_list_reorder = [reorder(seq) for seq in hist_item_list]
 
         hist_item_list_augment = []
         hist_item_list_augment.append(hist_item_list_mask)
-        hist_item_list_augment.append(hist_item_list_substitute)
+        hist_item_list_augment.append(hist_item_list_reorder)
 
         return np.array(hist_item_list), np.array(hist_mask_list), np.array(item_id_list), np.array(user_id_list), np.array(hist_item_list_augment)
 

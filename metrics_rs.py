@@ -457,7 +457,7 @@ def evaluation(input_data, train_label_dict, test_label_dict,
         print('\n topk={} recall={} ndcg={} auc={} precision={} f1={}'.format(topk[k], recall_[k], ndcg[k], auc, precision[k], f1[k]))
 
 
-def evaluate_full(sess, test_data, model: Model_SINE_SSL | Model_SINE_LI, dim):
+def evaluate_full(sess, test_data, model, dim):
     topN = 100
     topk = [50, 100]
     if mp.cpu_count() > 4:

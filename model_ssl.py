@@ -1,13 +1,6 @@
-import os
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib import layers
 # from tensorflow.nn.rnn_cell import GRUCell
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.ops.variables import PartitionedVariable
 
 def get_shape(inputs):
     dynamic_shape = tf.shape(inputs)
@@ -19,7 +12,7 @@ def get_shape(inputs):
     return shape
 
 class Model(object):
-    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, seq_len, share_emb=True, flag="DNN", item_norm=0):
+    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, seq_len, share_emb=True, flag="DNN", item_norm=0, temperature=1.0):
         self.model_flag = flag
         self.reg = False
         self.user_eb = None
@@ -32,10 +25,12 @@ class Model(object):
         self.dim = embedding_dim
         self.share_emb = share_emb
         self.item_norm = item_norm
+        self.temperature = temperature
         with tf.name_scope('Inputs'):
             self.i_ids = tf.placeholder(shape=[None], dtype=tf.int32)
             self.item = tf.placeholder(shape=[None, seq_len], dtype=tf.int32)
             self.nbr_mask = tf.placeholder(shape=[None, seq_len], dtype=tf.float32)
+            self.hist_item_list_augment = tf.placeholder(shape=[2, None, seq_len], dtype=tf.int32)
 
         # Embedding layer
         with tf.name_scope('Embedding_layer'):
@@ -53,11 +48,13 @@ class Model(object):
                 self.item_output_lookup_var = tf.get_variable("output_bias_lookup_table", [n_mid],
                                                              initializer=tf.zeros_initializer(), trainable=False)
 
-        emb = tf.nn.embedding_lookup(self.item_input_lookup,
-                                     tf.reshape(self.item, [-1]))
-        self.item_emb = tf.reshape(emb, [-1, self.hist_max, self.dim])
-        self.mask_length = tf.cast(tf.reduce_sum(self.nbr_mask, -1), dtype=tf.int32)
+        item_augs = tf.split(self.hist_item_list_augment, num_or_size_splits=2, axis=0)
+        emb = tf.nn.embedding_lookup(self.item_input_lookup, tf.reshape(self.item, [-1]))
+        emb_augs = [tf.nn.embedding_lookup(self.item_input_lookup, tf.reshape(item_aug, [-1])) for item_aug in item_augs]
+        self.item_emb = tf.reshape(emb, [-1, self.hist_max, self.dim]) # [-1, seq_len, embedding_dim]
+        self.item_aug_embs = [tf.reshape(emb_aug, [-1, self.hist_max, self.dim]) for emb_aug in emb_augs]
 
+        self.mask_length = tf.cast(tf.reduce_sum(self.nbr_mask, -1), dtype=tf.int32)
         self.item_output_emb = self.output_item2()
 
     def output_item2(self):
@@ -86,14 +83,14 @@ class Model(object):
 
         return loss
 
-    def _xent_loss_weight(self, user, seq_multi):
+    def _xent_loss_weight(self, user, seq_multi, user_eb_augs, seq_augs_multi):
         emb_dim = self.dim
         loss = tf.nn.sampled_softmax_loss(
             weights=self.output_item2(),
             # weights=self.item_output_lookup,
             biases=self.item_output_lookup_var,
             labels=tf.reshape(self.i_ids, [-1, 1]),
-            inputs=tf.reshape(user, [-1, emb_dim]),
+            inputs=tf.reshape(user, [-1, emb_dim]), 
             num_sampled=self.neg_num * self.batch_size,
             num_classes=self.n_size,
             partition_strategy='mod',
@@ -101,20 +98,42 @@ class Model(object):
         )
 
         regs = self.calculate_interest_loss(seq_multi)
+        cl_loss = self.calculate_cl_loss(user_eb_augs)
 
         self.loss = tf.reduce_mean(loss)
         self.reg_loss = self.alpha_para * tf.reduce_mean(regs)
-        loss = self.loss + self.reg_loss
+        self.cl_loss = self.alpha_para * tf.reduce_mean(cl_loss)
+        loss = self.loss + self.reg_loss + self.cl_loss
 
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(loss)
 
         return loss
+    
+    def calculate_cl_loss(self, user_eb_augs):
+        '''
+        user_eb_augs: [(tf.Tensor shape=[?,128]), (tf.Tensor shape=[?,128])]
+        '''
+        batch_sample_one, batch_sample_two = user_eb_augs[0], user_eb_augs[1]
+        sim11 = tf.matmul(batch_sample_one, tf.transpose(batch_sample_one)) / self.temperature
+        sim22 = tf.matmul(batch_sample_two, tf.transpose(batch_sample_two)) / self.temperature
+        sim12 = tf.matmul(batch_sample_one, tf.transpose(batch_sample_two)) / self.temperature
+        _, d = get_shape(sim12)
+        sim11 = tf.linalg.set_diag(sim11, tf.fill([d], float('-inf')))
+        sim22 = tf.linalg.set_diag(sim22, tf.fill([d], float('-inf')))
+        raw_scores1 = tf.concat([sim12, sim11], axis=-1)
+        raw_scores2 = tf.concat([sim22, tf.transpose(sim12)], axis=-1)
+        logits = tf.concat([raw_scores1, raw_scores2], axis=-2)
+        labels = tf.range(2 * d, dtype=tf.int32)
+        nce_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
+        nce_loss = tf.reduce_mean(nce_loss)
+        return nce_loss
 
-    def train(self, sess, hist_item, nbr_mask, i_ids):
+    def train(self, sess, hist_item, nbr_mask, i_ids, hist_item_list_augment):
         feed_dict = {
             self.i_ids: i_ids,
             self.item: hist_item,
-            self.nbr_mask: nbr_mask
+            self.nbr_mask: nbr_mask,
+            self.hist_item_list_augment: hist_item_list_augment
         }
         loss, _ = sess.run([self.loss, self.optimizer], feed_dict=feed_dict)
         return loss
@@ -148,27 +167,27 @@ class Model(object):
 
         interests_losses = []
         for i in range(1, (dim1 + 1) // 2):
-            roll_interests = array_ops.concat(
+            roll_interests = tf.concat(
                     (norm_interests[:, i:, :], norm_interests[:, 0:i, :]), axis=1)
             # compute pair-wise interests similarity.
-            interests_radial_diffs = math_ops.multiply(
-                    array_ops.reshape(norm_interests, [dim0*dim1, dim2]),
-                    array_ops.reshape(roll_interests, [dim0*dim1, dim2]))
-            interests_loss = math_ops.reduce_sum(interests_radial_diffs, axis=-1)
-            interests_loss = array_ops.reshape(interests_loss, [dim0, dim1])
-            interests_loss = math_ops.reduce_sum(interests_loss, axis=-1)
+            interests_radial_diffs = tf.math.multiply(
+                    tf.reshape(norm_interests, [dim0*dim1, dim2]),
+                    tf.reshape(roll_interests, [dim0*dim1, dim2]))
+            interests_loss = tf.math.reduce_sum(interests_radial_diffs, axis=-1)
+            interests_loss = tf.reshape(interests_loss, [dim0, dim1])
+            interests_loss = tf.math.reduce_sum(interests_loss, axis=-1)
             interests_losses.append(interests_loss)
 
         if dim1 % 2 == 0:
             half_dim1 = dim1 // 2
             interests_part1 = norm_interests[:, :half_dim1, :]
             interests_part2 = norm_interests[:, half_dim1:, :]
-            interests_radial_diffs = math_ops.multiply(
-                    array_ops.reshape(interests_part1, [dim0*half_dim1, dim2]),
-                    array_ops.reshape(interests_part2, [dim0*half_dim1, dim2]))
-            interests_loss = math_ops.reduce_sum(interests_radial_diffs, axis=-1)
-            interests_loss = array_ops.reshape(interests_loss, [dim0, half_dim1])
-            interests_loss = math_ops.reduce_sum(interests_loss, axis=-1)
+            interests_radial_diffs = tf.math.multiply(
+                    tf.reshape(interests_part1, [dim0*half_dim1, dim2]),
+                    tf.reshape(interests_part2, [dim0*half_dim1, dim2]))
+            interests_loss = tf.math.reduce_sum(interests_radial_diffs, axis=-1)
+            interests_loss = tf.reshape(interests_loss, [dim0, half_dim1])
+            interests_loss = tf.math.reduce_sum(interests_loss, axis=-1)
             interests_losses.append(interests_loss)
 
         # NOTE(reed): the original interests_loss lay in [0, 2], so the
@@ -176,13 +195,13 @@ class Model(object):
         # [0, 1]
         self._interests_length = None
         if self._interests_length is not None:
-            combination_size = math_ops.cast(
+            combination_size = tf.cast(
                     self._interests_length * (self._interests_length - 1),
-                    dtypes.float32)
+                    tf.dtypes.DType(tf.float32))
         else:
             combination_size = dim1 * (dim1 - 1)
         interests_loss = 0.5 + (
-                math_ops.reduce_sum(interests_losses, axis=0) / combination_size)
+                tf.math.reduce_sum(interests_losses, axis=0) / combination_size)
 
         return interests_loss
 
@@ -305,10 +324,10 @@ class SparseNetwork(object):
         return interest_dist
 
     def attention_weight(self, input_seq):
-        prob_item = layers.fully_connected(
+        prob_item = tf.contrib.layers.fully_connected(
             input_seq, self.hidden_units, activation_fn=tf.nn.tanh)  # [B,T,D]
         # noinspection PyUnresolvedReferences
-        prob_item = layers.fully_connected(
+        prob_item = tf.contrib.layers.fully_connected(
             prob_item, self.category_num, activation_fn=None)  # [B,T,C]
         prob_item = tf.nn.softmax(prob_item / self.temperature, dim=2)  # [B,T, C]
         return prob_item
@@ -316,7 +335,7 @@ class SparseNetwork(object):
     def interest_generator(self, item_emb, nbr_mask):
         mask = tf.expand_dims(nbr_mask, axis=2)  # [B, T, 1]
         self.category_infer(item_emb, nbr_mask)
-        itm_emb_shift = item_emb + layers.fully_connected(
+        itm_emb_shift = item_emb + tf.contrib.layers.fully_connected(
             item_emb, self.dim, activation_fn=None)  # [B,T,D]
         item_emb_norm = tf.nn.l2_normalize(itm_emb_shift, -1)
 
@@ -448,10 +467,10 @@ class PrototypicalDispatcher(object):
         return y  # [B,H]
 
 
-class Model_SINE(Model):
+class Model_SINE_SSL(Model):
     def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, seq_len, topic_num, category_num, alpha,
                  neg_num, cpt_feat, user_norm, item_norm, cate_norm, n_head):
-        super(Model_SINE, self).__init__(n_mid, embedding_dim, hidden_size, batch_size, seq_len, flag="SINE", item_norm=item_norm)
+        super(Model_SINE_SSL, self).__init__(n_mid, embedding_dim, hidden_size, batch_size, seq_len, flag="SINE", item_norm=item_norm)
         self.num_topic = topic_num
         self.category_num = category_num
         self.hidden_units = hidden_size
@@ -475,7 +494,11 @@ class Model_SINE(Model):
 
         self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)
         self.user_eb = self.labeled_attention(self.seq_multi)
-        self._xent_loss_weight(self.user_eb, self.seq_multi)
+
+        self.seq_augs_multi = [self.sequence_encode_cpt(item_aug_emb, self.nbr_mask) for item_aug_emb in self.item_aug_embs]
+        self.user_eb_augs = [self.labeled_attention(seq_aug_multi) for seq_aug_multi in self.seq_augs_multi]
+
+        self._xent_loss_weight(self.user_eb, self.seq_multi,  self.user_eb_augs, self.seq_augs_multi)
 
     def sequence_encode_concept(self, item_emb, nbr_mask):
 
@@ -633,9 +656,8 @@ def get_param_var(name, shape, partitioner=None, initializer=None,
         # noinspection PyUnresolvedReferences
         var = tf.get_variable(
             name, shape=shape, dtype=tf.float32,
-            initializer=(initializer or layers.xavier_initializer()),
-            collections=[ops.GraphKeys.GLOBAL_VARIABLES,
-                         ops.GraphKeys.MODEL_VARIABLES])
+            initializer=(initializer or tf.contrib.layers.xavier_initializer()),
+            collections=[tf.GraphKeys.GLOBAL_VARIABLES, tf.GraphKeys.MODEL_VARIABLES])
     return var
 
 

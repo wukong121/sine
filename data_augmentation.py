@@ -265,19 +265,3 @@ class Reorder(object):
                         copied_sequence[start_index+sub_seq_length:]
         assert len(copied_sequence) == len(reordered_seq)
         return reordered_seq
-
-if __name__ == '__main__':
-    reorder = Reorder(beta=0.2)
-    sequence=[14052, 10908,  2776, 16243,  2726,  2961, 11962,  4672,  2224,
-    5727,  4985,  9310,  2181,  3428,  4156, 16536,   180, 12044, 13700]
-    rs = reorder(sequence)
-    crop = Crop(tao=0.2)
-    rs = crop(sequence)
-    # rt = RandomType()
-    # rs = rt(sequence)
-    n_views = 5
-    enum_type = CombinatorialEnumerateType(n_views=n_views)
-    for i in range(40):
-        if i == 20:
-            print('-------')
-        es = enum_type(sequence)
