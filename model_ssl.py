@@ -21,6 +21,7 @@ class Model(object):
         self.neg_num = 10
         self.lr = 0.001
         self.alpha_para = 0.0
+        self.beta_para = 0.0
         self.hist_max = seq_len
         self.dim = embedding_dim
         self.share_emb = share_emb
@@ -102,7 +103,7 @@ class Model(object):
 
         self.loss = tf.reduce_mean(loss)
         self.reg_loss = self.alpha_para * tf.reduce_mean(regs)
-        self.cl_loss = self.alpha_para * tf.reduce_mean(cl_loss)
+        self.cl_loss = self.beta_para * tf.reduce_mean(cl_loss)
         loss = self.loss + self.reg_loss + self.cl_loss
 
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(loss)
@@ -474,13 +475,14 @@ class PrototypicalDispatcher(object):
 
 
 class Model_SINE_SSL(Model):
-    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, seq_len, topic_num, category_num, alpha,
+    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, seq_len, topic_num, category_num, alpha, beta,
                  neg_num, cpt_feat, user_norm, item_norm, cate_norm, n_head):
         super(Model_SINE_SSL, self).__init__(n_mid, embedding_dim, hidden_size, batch_size, seq_len, flag="SINE", item_norm=item_norm)
         self.num_topic = topic_num
         self.category_num = category_num
         self.hidden_units = hidden_size
         self.alpha_para = alpha
+        self.beta_para = beta
         self.temperature = 0.07
         # self.temperature = 0.1
         self.user_norm = user_norm

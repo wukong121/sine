@@ -25,7 +25,8 @@ parser.add_argument('--neg_num', type=int, default=10)
 parser.add_argument('--cpt_feat', type=int, default=1)
 parser.add_argument('--model_type', type=str, default='SINE', help='SINE')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='')
-parser.add_argument('--alpha', type=float, default=0.0, help='')
+parser.add_argument('--alpha', type=float, default=0.0, help='hyperparameter for interest loss (default: 0.0)')
+parser.add_argument('--beta', type=float, default=0.0, help='hyperparameter for contrastive loss (default: 0.0)')
 parser.add_argument('--batch_size', type=int, default=128, help='(k)')
 parser.add_argument('--maxlen', type=int, default=20, help='(k)')
 parser.add_argument('--epoch', type=int, default=30, help='(k)')
@@ -50,7 +51,7 @@ def get_model(dataset, model_type, item_count, user_count, args):
                         args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     else:
         model = Model_SINE_SSL(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
-                               args.topic_num, args.category_num, args.alpha, args.neg_num, args.cpt_feat, 
+                               args.topic_num, args.category_num, args.alpha, args.beta, args.neg_num, args.cpt_feat, 
                                args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     return model
 
@@ -73,7 +74,7 @@ def train(train_file, valid_file, test_file, args):
     best_model_path = "save_model/" + '%s' % dataset + '_%s' % model_type + '_topic%d' % topic_num \
                       + '_cept%d' % concept_num + '_len%d' % maxlen + '_neg%d' % args.neg_num \
                       + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm \
-                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha)
+                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha) + '_beta{}'.format(args.beta)
     topk = [10, 50, 100]
     best_metric = 0
     best_metric_ndcg = 0
@@ -168,7 +169,7 @@ def test(train_file, valid_file, test_file, args):
     best_model_path = "save_model/" + '%s' % dataset + '_%s' % model_type + '_topic%d' % topic_num \
                       + '_cept%d' % concept_num + '_len%d' % maxlen + '_neg%d' % args.neg_num \
                       + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm\
-                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha)
+                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha) + '_beta{}'.format(args.beta)
     gpu_options = tf.GPUOptions(allow_growth=True)
     model = get_model(dataset, model_type, item_count, user_count, args)
     print('---> Start testing...')
