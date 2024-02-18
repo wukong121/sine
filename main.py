@@ -59,6 +59,7 @@ def get_exp_name(dataset, model_type, topic_num, concept_num, maxlen, save=True)
     return para_name
 
 def train(train_file, valid_file, test_file, args):
+    global global_iter
     dataset = args.dataset
     batch_size = args.batch_size
     maxlen = args.maxlen
@@ -77,7 +78,7 @@ def train(train_file, valid_file, test_file, args):
     best_metric = 0
     best_metric_ndcg = 0
     
-    # summary_writer = tf.summary.FileWriter("./log")
+    summary_writer = tf.summary.FileWriter("./log/"+time.strftime("%Y-%m-%d %H:%M"), tf.get_default_graph())
 
     best_epoch = 0
 
@@ -113,13 +114,13 @@ def train(train_file, valid_file, test_file, args):
                 if args.experiment == 0:
                     loss = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
                 else:
-                    loss = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
+                    loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
                 loss_iter += loss
                 iter += 1
+                global_iter += 1
                 if iter % test_iter == 0:
                     print('--> Epoch {} / {} at iter {} loss {}'.format(epoch, args.epoch, iter, loss))
-                # with summary_writer.as_default():
-                #     tf.summary.scalar("loss", loss, step=iter+epoch*test_iter)
+                summary_writer.add_summary(summary, global_iter)
                 
             metrics = evaluate_full(sess, valid_data, model, args.embedding_dim)
             for k in range(len(topk)):
@@ -144,6 +145,7 @@ def train(train_file, valid_file, test_file, args):
 
             test_time = time.time()
             print("time interval for one epoch: %.4f min" % ((test_time - start_time) / 60.0))
+        summary_writer.close()    
     print('!!! Best epoch is %d' % best_epoch)
     return best_epoch
 
@@ -189,6 +191,7 @@ def print_configuration(args):
 
 
 if __name__ == '__main__':
+    global_iter = 0
     args = parser.parse_args()
     SEED = args.random_seed
 
@@ -207,8 +210,6 @@ if __name__ == '__main__':
         args.test_iter = 1000
     if args.dataset == 'ml1m':
         path = './data/ml1m/'
-        args.category_num = 2
-        args.topic_num = 10
         args.item_count = 3706
         args.user_count = 6040
         args.test_iter = 500

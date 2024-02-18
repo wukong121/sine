@@ -128,6 +128,12 @@ class Model(object):
         nce_loss = tf.reduce_mean(nce_loss)
         return nce_loss
 
+    def summary_loss(self):
+        tf.summary.scalar('sampled_softmax_loss', self.loss)
+        tf.summary.scalar('interest_loss', self.reg_loss)
+        tf.summary.scalar('contrastive_loss', self.cl_loss)
+        self.merged_summary = tf.summary.merge_all()
+
     def train(self, sess, hist_item, nbr_mask, i_ids, hist_item_list_augment):
         feed_dict = {
             self.i_ids: i_ids,
@@ -135,8 +141,8 @@ class Model(object):
             self.nbr_mask: nbr_mask,
             self.hist_item_list_augment: hist_item_list_augment
         }
-        loss, _ = sess.run([self.loss, self.optimizer], feed_dict=feed_dict)
-        return loss
+        loss, _, summary = sess.run([self.loss, self.optimizer, self.merged_summary], feed_dict=feed_dict)
+        return loss, summary
 
     def output_item(self, sess):
         item_embs = sess.run(self.item_output_emb)
@@ -499,6 +505,7 @@ class Model_SINE_SSL(Model):
         self.user_eb_augs = [self.labeled_attention(seq_aug_multi) for seq_aug_multi in self.seq_augs_multi]
 
         self._xent_loss_weight(self.user_eb, self.seq_multi,  self.user_eb_augs, self.seq_augs_multi)
+        self.summary_loss()
 
     def sequence_encode_concept(self, item_emb, nbr_mask):
 
