@@ -1,14 +1,7 @@
 import numpy as np
 from deepctr.feature_column import concat_func
 import tensorflow as tf
-from tensorflow.contrib import layers
 # from tensorflow.nn.rnn_cell import GRUCell
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.ops.variables import PartitionedVariable
-from tensorflow.python.keras.layers import Dense, Lambda
 
 def get_shape(inputs):
     dynamic_shape = tf.shape(inputs)
@@ -20,7 +13,7 @@ def get_shape(inputs):
     return shape
 
 class Model(object):
-    def __init__(self, n_mid, user_count: int, embedding_dim, hidden_size, output_size, batch_size, seq_len, share_emb=True, 
+    def __init__(self, n_mid, user_count, embedding_dim, hidden_size, output_size, batch_size, seq_len, share_emb=True, 
                  flag="DNN", item_norm=0):
         self.model_flag = flag
         self.reg = False
@@ -126,6 +119,11 @@ class Model(object):
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(loss)
 
         return loss
+    
+    def summary_loss(self):
+        tf.summary.scalar('sampled_softmax_loss', self.loss)
+        tf.summary.scalar('interest_loss', self.reg_loss)
+        self.merged_summary = tf.summary.merge_all()
 
     def train(self, sess, hist_item, nbr_mask, i_ids, user_id):
         feed_dict = {
@@ -134,8 +132,8 @@ class Model(object):
             self.nbr_mask: nbr_mask,
             self.user_id: user_id
         }
-        loss, _ = sess.run([self.loss, self.optimizer], feed_dict=feed_dict)
-        return loss
+        loss, _, summary = sess.run([self.loss, self.optimizer, self.merged_summary], feed_dict=feed_dict)
+        return loss, summary
 
     def output_item(self, sess):
         item_embs = sess.run(self.item_output_emb)
@@ -167,27 +165,27 @@ class Model(object):
 
         interests_losses = []
         for i in range(1, (dim1 + 1) // 2):
-            roll_interests = array_ops.concat(
+            roll_interests = tf.concat(
                     (norm_interests[:, i:, :], norm_interests[:, 0:i, :]), axis=1)
             # compute pair-wise interests similarity.
-            interests_radial_diffs = math_ops.multiply(
-                    array_ops.reshape(norm_interests, [dim0*dim1, dim2]),
-                    array_ops.reshape(roll_interests, [dim0*dim1, dim2]))
-            interests_loss = math_ops.reduce_sum(interests_radial_diffs, axis=-1)
-            interests_loss = array_ops.reshape(interests_loss, [dim0, dim1])
-            interests_loss = math_ops.reduce_sum(interests_loss, axis=-1)
+            interests_radial_diffs = tf.math.multiply(
+                    tf.reshape(norm_interests, [dim0*dim1, dim2]),
+                    tf.reshape(roll_interests, [dim0*dim1, dim2]))
+            interests_loss = tf.math.reduce_sum(interests_radial_diffs, axis=-1)
+            interests_loss = tf.reshape(interests_loss, [dim0, dim1])
+            interests_loss = tf.math.reduce_sum(interests_loss, axis=-1)
             interests_losses.append(interests_loss)
 
         if dim1 % 2 == 0:
             half_dim1 = dim1 // 2
             interests_part1 = norm_interests[:, :half_dim1, :]
             interests_part2 = norm_interests[:, half_dim1:, :]
-            interests_radial_diffs = math_ops.multiply(
-                    array_ops.reshape(interests_part1, [dim0*half_dim1, dim2]),
-                    array_ops.reshape(interests_part2, [dim0*half_dim1, dim2]))
-            interests_loss = math_ops.reduce_sum(interests_radial_diffs, axis=-1)
-            interests_loss = array_ops.reshape(interests_loss, [dim0, half_dim1])
-            interests_loss = math_ops.reduce_sum(interests_loss, axis=-1)
+            interests_radial_diffs = tf.math.multiply(
+                    tf.reshape(interests_part1, [dim0*half_dim1, dim2]),
+                    tf.reshape(interests_part2, [dim0*half_dim1, dim2]))
+            interests_loss = tf.math.reduce_sum(interests_radial_diffs, axis=-1)
+            interests_loss = tf.reshape(interests_loss, [dim0, half_dim1])
+            interests_loss = tf.math.reduce_sum(interests_loss, axis=-1)
             interests_losses.append(interests_loss)
 
         # NOTE(reed): the original interests_loss lay in [0, 2], so the
@@ -195,13 +193,13 @@ class Model(object):
         # [0, 1]
         self._interests_length = None
         if self._interests_length is not None:
-            combination_size = math_ops.cast(
+            combination_size = tf.cast(
                     self._interests_length * (self._interests_length - 1),
-                    dtypes.float32)
+                    tf.dtypes.DType(tf.float32))
         else:
             combination_size = dim1 * (dim1 - 1)
         interests_loss = 0.5 + (
-                math_ops.reduce_sum(interests_losses, axis=0) / combination_size)
+                tf.math.reduce_sum(interests_losses, axis=0) / combination_size)
 
         return interests_loss
 
@@ -324,10 +322,10 @@ class SparseNetwork(object):
         return interest_dist
 
     def attention_weight(self, input_seq):
-        prob_item = layers.fully_connected(
+        prob_item = tf.contrib.layers.fully_connected(
             input_seq, self.hidden_units, activation_fn=tf.nn.tanh)  # [B,T,D]
         # noinspection PyUnresolvedReferences
-        prob_item = layers.fully_connected(
+        prob_item = tf.contrib.layers.fully_connected(
             prob_item, self.category_num, activation_fn=None)  # [B,T,C]
         prob_item = tf.nn.softmax(prob_item / self.temperature, dim=2)  # [B,T, C]
         return prob_item
@@ -335,7 +333,7 @@ class SparseNetwork(object):
     def interest_generator(self, item_emb, nbr_mask):
         mask = tf.expand_dims(nbr_mask, axis=2)  # [B, T, 1]
         self.category_infer(item_emb, nbr_mask)
-        itm_emb_shift = item_emb + layers.fully_connected(
+        itm_emb_shift = item_emb + tf.contrib.layers.fully_connected(
             item_emb, self.dim, activation_fn=None)  # [B,T,D]
         item_emb_norm = tf.nn.l2_normalize(itm_emb_shift, -1)
 
@@ -494,9 +492,8 @@ class Model_SINE_LI(Model):
                     name='topic_embedding')
 
         self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)  # ?,2,128
-        # print("seq_multi的维度是：", self.seq_multi.shape)
         self.user_eb = self.labeled_attention(self.seq_multi)  # ?*128
-        # print("user_eb的维度是：", self.user_eb.shape)
+
         self.long_user_embedding = self.attention_level_one(self.user_embedding, self.item_emb,
                                                             self.the_first_w, self.the_first_bias)  # (128,)  why is this
         # print("long_user_embedding的维度是：", self.long_user_embedding.shape)
@@ -505,26 +502,23 @@ class Model_SINE_LI(Model):
 
         gate_input = concat_func([self.user_eb, self.long_user_embedding, self.user_embedding])  # 20*256
         # print("gate_input的维度是：", gate_input.shape)
-        gate = Dense(self.output_units, activation='sigmoid')(gate_input)
+        gate = tf.keras.layers.Dense(self.output_units, activation='sigmoid')(gate_input)
         # print("gate的维度：", gate.shape)
         self.user_eb = tf.multiply(gate, self.user_eb) + tf.multiply(1 - gate, self.long_user_embedding)
         # self.user_eb = tf.squeeze(self.user_eb, 1)
         self.user_eb = self.l2_normalize(self.user_eb)
 
         self._xent_loss_weight(self.user_eb, self.seq_multi)
+        self.summary_loss()
         
     def l2_normalize(self, x, axis = -1):
-        return Lambda(lambda x: tf.nn.l2_normalize(x, axis))(x)
-    
+        return tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis))(x)
 
     def attention_level_one(self, user_embedding, item_emb, the_first_w, the_first_bias):
-        print("user_embedding的维度是：", user_embedding.shape)  # [?,128]
         user_embedding_expanded = tf.expand_dims(user_embedding, axis=1)  # [n,1,128]，转置后变成[n,128,1]
-        print("user_embedding_expanded的维度是：", user_embedding_expanded.shape)
         weight = tf.nn.softmax(tf.transpose(tf.matmul(
             tf.sigmoid(tf.add(tf.matmul(item_emb, the_first_w), the_first_bias)),
             tf.transpose(user_embedding_expanded, perm=[0,2,1])), perm=[0,2,1]))  # [n,1,20]
-        print("weight的维度是：", weight.shape)
         out = tf.reduce_sum(tf.multiply(item_emb, tf.transpose(weight, perm=[0,2,1])), axis=1)  # reduce_sum([n,20,128]multiply[n,20,1])---[n,128]
         return tf.reshape(out, [-1, self.dim])
     
@@ -684,9 +678,8 @@ def get_param_var(name, shape, partitioner=None, initializer=None,
         # noinspection PyUnresolvedReferences
         var = tf.get_variable(
             name, shape=shape, dtype=tf.float32,
-            initializer=(initializer or layers.xavier_initializer()),
-            collections=[ops.GraphKeys.GLOBAL_VARIABLES,
-                         ops.GraphKeys.MODEL_VARIABLES])
+            initializer=(initializer or tf.contrib.layers.xavier_initializer()),
+            collections=[tf.GraphKeys.GLOBAL_VARIABLES, tf.GraphKeys.MODEL_VARIABLES])
     return var
 
 

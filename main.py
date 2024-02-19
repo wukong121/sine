@@ -79,7 +79,8 @@ def train(train_file, valid_file, test_file, args):
     best_metric = 0
     best_metric_ndcg = 0
     
-    summary_writer = tf.summary.FileWriter("./log/"+time.strftime("%Y-%m-%d %H:%M"), tf.get_default_graph())
+    summary_writer = tf.summary.FileWriter(
+        "./log/{}-".format("li" if args.experiment == 0 else "ssl")+time.strftime("%Y-%m-%d %H:%M"), tf.get_default_graph())
 
     best_epoch = 0
 
@@ -113,7 +114,7 @@ def train(train_file, valid_file, test_file, args):
                                                                                     metrics['ndcg'][k]))
                     break
                 if args.experiment == 0:
-                    loss = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
+                    loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
                 else:
                     loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
                 loss_iter += loss
