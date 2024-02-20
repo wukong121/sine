@@ -40,6 +40,9 @@ parser.add_argument('--n_head', type=int, default=1)
 parser.add_argument('--output_size', type=int, default=128)
 parser.add_argument('--experiment', type=int, default=0, help="0 for Long-Intent, 1 for Self-supervised Learning")
 parser.add_argument('--temperature', type=float, default=1.0, help="softmax temperature (default:  1.0) - not studied.")
+parser.add_argument('--similarity_model_name', default='ItemCF_IUF', type=str, \
+                        help="Method to generate item similarity score. choices: \
+                        Random, ItemCF, ItemCF_IUF(Inverse user frequency), Item2Vec, LightGCN")
 
 def get_model(dataset, model_type, item_count, user_count, args):
     if not model_type == 'SINE':
@@ -59,7 +62,7 @@ def get_exp_name(dataset, model_type, topic_num, concept_num, maxlen, save=True)
     para_name = '_'.join([dataset, model_type, 't'+str(topic_num), 'c'+str(concept_num), 'len'+str(maxlen)])
     return para_name
 
-def train(train_file, valid_file, test_file, args):
+def train(train_file, valid_file, test_file, similarity_model_path, args):
     global global_iter
     dataset = args.dataset
     batch_size = args.batch_size
@@ -87,9 +90,10 @@ def train(train_file, valid_file, test_file, args):
     gpu_options = tf.GPUOptions(allow_growth=True)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        train_data = DataIterator(train_file, batch_size, maxlen, train_flag=0)
-        valid_data = DataIterator(valid_file, batch_size, maxlen, train_flag=1)
-        test_data = DataIterator(test_file, batch_size, maxlen, train_flag=1)
+        train_data = DataIterator(
+            train_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=0)
+        valid_data = DataIterator(valid_file, similarity_model_path, args.similarity_model_name, batch_size, maxlen, train_flag=1)
+        test_data = DataIterator(test_file, similarity_model_path, args.similarity_model_name, batch_size, maxlen, train_flag=1)
         
         model = get_model(dataset, model_type, item_count, user_count, args)
         
@@ -229,11 +233,13 @@ if __name__ == '__main__':
     train_file = path + args.dataset + '_train.txt'
     valid_file = path + args.dataset + '_valid.txt'
     test_file = path + args.dataset + '_test.txt'
+    similarity_model_path = os.path.join(path,\
+        args.dataset+"_"+args.similarity_model_name+"_similarity.pkl")
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print_configuration(args)
 
-    best_epoch = train(train_file, valid_file, test_file, args)
+    best_epoch = train(train_file, valid_file, test_file, similarity_model_path, args)
 
     test(train_file, valid_file, test_file, args)
     print('--> Finish!')

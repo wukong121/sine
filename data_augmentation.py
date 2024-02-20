@@ -214,7 +214,7 @@ class Substitute(object):
                 copied_sequence[index] = substitute_items[0]
             else:
             
-                copied_sequence[index] = copied_sequence[index] = self.item_similarity_model.most_similar(copied_sequence[index])[0]
+                copied_sequence[index] = self.item_similarity_model.most_similar(copied_sequence[index])[0]
         return copied_sequence
 
 class Crop(object):

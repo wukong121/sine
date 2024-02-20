@@ -1,17 +1,22 @@
 import random
 import numpy as np
 from data_augmentation import *
+from similarity_model import OfflineItemSimilarity
 from typing import *
 
 
 class DataIterator:
 
-    def __init__(self, source,
+    def __init__(self, source, similarity_model_path, similarity_model_name, dataset_name,
                  batch_size=128,
                  maxlen=20,
                  train_flag=0,
                  shuffle=True
                 ):
+        self.source = source
+        self.similarity_model_path = similarity_model_path
+        self.similarity_model_name = similarity_model_name
+        self.dataset_name = dataset_name
         self.batch_size = batch_size
         self.eval_batch_size = batch_size
         self.train_flag = train_flag
@@ -23,6 +28,17 @@ class DataIterator:
         self.read(source)
         self.users = list(self.users)
         self.items = list(self.items)
+        self.n_views = 5
+        self.similarity_model = OfflineItemSimilarity(
+            data_file=self.source, 
+            similarity_path=self.similarity_model_path, 
+            model_name=self.similarity_model_name, 
+            dataset_name=self.dataset_name
+        )
+        self.data_augmentation_methods = [Mask(), Reorder(), Insert(self.similarity_model), Substitute(self.similarity_model), Crop()]
+        self.augmentation_idx_list = list(itertools.combinations([i for i in range(self.n_views)], 2))
+        self.total_augmentation_samples = len(self.augmentation_idx_list)
+        self.cur_augmentation_idx_of_idx = 0
         if train_flag == 0:
             self._shuffle()
 
@@ -97,15 +113,24 @@ class DataIterator:
                 hist_item_list.append(item_[:k] + [0] * (self.maxlen - k)) # 前面k个item保留，后面不足maxlen的位置补0
                 hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k))  # 前面k个item的mask为1，后面不足maxlen的位置为0.0
         
-        mask, reorder = Mask(), Reorder()
-        hist_item_list_mask = [mask(seq) for seq in hist_item_list]
-        hist_item_list_reorder = [reorder(seq) for seq in hist_item_list]
+        hist_item_list_aug1, hist_item_list_aug2 = [], []
+        for i, seq in enumerate(hist_item_list):
+            augment_idx = i % self.total_augmentation_samples
+            hist_item_list_aug1.append(self.align(self.data_augmentation_methods[self.augmentation_idx_list[augment_idx][0]](seq)))
+            hist_item_list_aug2.append(self.align(self.data_augmentation_methods[self.augmentation_idx_list[augment_idx][1]](seq)))
 
         hist_item_list_augment = []
-        hist_item_list_augment.append(hist_item_list_mask)
-        hist_item_list_augment.append(hist_item_list_reorder)
+        hist_item_list_augment.append(hist_item_list_aug1)
+        hist_item_list_augment.append(hist_item_list_aug2)
 
         return np.array(hist_item_list), np.array(hist_mask_list), np.array(item_id_list), np.array(user_id_list), np.array(hist_item_list_augment)
+
+    def align(self, seq):
+        pad_len = self.maxlen - len(seq)
+        seq = [0] * pad_len + seq
+        seq = seq[-self.maxlen:]
+        assert len(seq) == self.maxlen
+        return seq
 
 
 class LargeDataIterator:
