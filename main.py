@@ -92,8 +92,10 @@ def train(train_file, valid_file, test_file, similarity_model_path, args):
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         train_data = DataIterator(
             train_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=0)
-        valid_data = DataIterator(valid_file, similarity_model_path, args.similarity_model_name, batch_size, maxlen, train_flag=1)
-        test_data = DataIterator(test_file, similarity_model_path, args.similarity_model_name, batch_size, maxlen, train_flag=1)
+        valid_data = DataIterator(
+            valid_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
+        test_data = DataIterator(
+            test_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
         
         model = get_model(dataset, model_type, item_count, user_count, args)
         
@@ -114,8 +116,8 @@ def train(train_file, valid_file, test_file, similarity_model_path, args):
                 except StopIteration:
                     metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
                     for k in range(len(topk)):
-                        print('!!!! Test result epoch %d topk=%d hitrate=%.4f ndcg=%.4f' % (epoch, topk[k], metrics['hitrate'][k],
-                                                                                    metrics['ndcg'][k]))
+                        print('!!!! Test result epoch %d topk=%d hitrate=%.4f ndcg=%.4f' \
+                            % (epoch, topk[k], metrics['hitrate'][k], metrics['ndcg'][k]))
                     break
                 if args.experiment == 0:
                     loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
