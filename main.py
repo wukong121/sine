@@ -1,6 +1,8 @@
 import argparse
 import random
+import datetime
 import time
+import pytz
 import os
 import tensorflow as tf
 import numpy as np
@@ -62,7 +64,7 @@ def get_exp_name(dataset, model_type, topic_num, concept_num, maxlen, save=True)
     para_name = '_'.join([dataset, model_type, 't'+str(topic_num), 'c'+str(concept_num), 'len'+str(maxlen)])
     return para_name
 
-def train(train_file, valid_file, test_file, similarity_model_path, args):
+def train(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args):
     global global_iter
     dataset = args.dataset
     batch_size = args.batch_size
@@ -74,19 +76,11 @@ def train(train_file, valid_file, test_file, similarity_model_path, args):
     concept_num = args.category_num
     patience = args.patience
     test_iter = args.test_iter
-    best_model_path = "save_model/" + '%s' % dataset + '_%s' % model_type + '_topic%d' % topic_num \
-                      + '_cept%d' % concept_num + '_len%d' % maxlen + '_neg%d' % args.neg_num \
-                      + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm \
-                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha) + '_beta{}'.format(args.beta)
     topk = [10, 50, 100]
     best_metric = 0
     best_metric_ndcg = 0
-    
-    summary_writer = tf.summary.FileWriter(
-        "./log/{}-".format("li" if args.experiment == 0 else "ssl")+time.strftime("%Y-%m-%d %H:%M"), tf.get_default_graph())
-
     best_epoch = 0
-
+    summary_writer = tf.summary.FileWriter(log_path, tf.get_default_graph())
     gpu_options = tf.GPUOptions(allow_growth=True)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
@@ -158,7 +152,7 @@ def train(train_file, valid_file, test_file, similarity_model_path, args):
     return best_epoch
 
 
-def test(train_file, valid_file, test_file, args):
+def test(train_file, valid_file, test_file, best_model_path, args):
     dataset = args.dataset
     batch_size = args.batch_size
     maxlen = args.maxlen
@@ -172,11 +166,6 @@ def test(train_file, valid_file, test_file, args):
     # exp_name = get_exp_name(dataset, model_type, topic_num, concept_num, maxlen)
     topk = [10, 50, 100]
     tf.reset_default_graph()
-
-    best_model_path = "save_model/" + '%s' % dataset + '_%s' % model_type + '_topic%d' % topic_num \
-                      + '_cept%d' % concept_num + '_len%d' % maxlen + '_neg%d' % args.neg_num \
-                      + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm\
-                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha) + '_beta{}'.format(args.beta)
     gpu_options = tf.GPUOptions(allow_growth=True)
     model = get_model(dataset, model_type, item_count, user_count, args)
     print('---> Start testing...')
@@ -235,13 +224,24 @@ if __name__ == '__main__':
     train_file = path + args.dataset + '_train.txt'
     valid_file = path + args.dataset + '_valid.txt'
     test_file = path + args.dataset + '_test.txt'
+
+    utc_now = datetime.datetime.utcnow()
+    shanghai_tz = pytz.timezone('Asia/Shanghai')
+    shanghai_time = utc_now.replace(tzinfo=pytz.utc).astimezone(shanghai_tz).strftime("%Y-%m-%d %H:%M")
+
+    log_path = "./log/{}-".format("li" if args.experiment == 0 else "ssl")+shanghai_time
+    best_model_path = log_path + "/save_model/" + '%s' % args.dataset + '_%s' % args.model_type + '_topic%d' % args.topic_num \
+                      + '_cept%d' % args.category_num + '_len%d' % args.maxlen + '_neg%d' % args.neg_num \
+                      + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm \
+                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha) + '_beta{}'.format(args.beta)
     similarity_model_path = os.path.join(path,\
         args.dataset+"_"+args.similarity_model_name+"_similarity.pkl")
+
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print_configuration(args)
 
-    best_epoch = train(train_file, valid_file, test_file, similarity_model_path, args)
+    best_epoch = train(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
 
-    test(train_file, valid_file, test_file, args)
+    test(train_file, valid_file, test_file, best_model_path, args)
     print('--> Finish!')

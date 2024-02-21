@@ -67,7 +67,6 @@ class Model(object):
         self.mask_length = tf.cast(tf.reduce_sum(self.nbr_mask, -1), dtype=tf.int32)
 
         self.user_embedding = tf.nn.embedding_lookup(self.user_embedding_matrix, self.user_id)  # ?*128
-        # print("user_embedding的维度是：", self.user_embedding.shape)
         self.item_output_emb = self.output_item2()
 
     def output_item2(self):
@@ -481,6 +480,7 @@ class Model_SINE_LI(Model):
         self.cate_norm = cate_norm
         self.neg_num = neg_num
         self.num_heads = n_head
+        self.output_units = output_size
         if cpt_feat == 1:
             self.cpt_feat = True
         else:
@@ -492,24 +492,21 @@ class Model_SINE_LI(Model):
                     name='topic_embedding')
 
         self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)  # ?,2,128
-        self.user_eb = self.labeled_attention(self.seq_multi)  # ?*128
+        self.user_eb_short = self.labeled_attention(self.seq_multi)  # ?*128
 
         self.long_user_embedding = self.attention_level_one(self.user_embedding, self.item_emb,
                                                             self.the_first_w, self.the_first_bias)  # (128,)  why is this
-        # print("long_user_embedding的维度是：", self.long_user_embedding.shape)
-        self.output_units = output_size
-
-
-        gate_input = concat_func([self.user_eb, self.long_user_embedding, self.user_embedding])  # 20*256
-        # print("gate_input的维度是：", gate_input.shape)
-        gate = tf.keras.layers.Dense(self.output_units, activation='sigmoid')(gate_input)
-        # print("gate的维度：", gate.shape)
-        self.user_eb = tf.multiply(gate, self.user_eb) + tf.multiply(1 - gate, self.long_user_embedding)
-        # self.user_eb = tf.squeeze(self.user_eb, 1)
-        self.user_eb = self.l2_normalize(self.user_eb)
-
+        self.user_eb = self.gate_user_eb(self.long_user_embedding, self.user_eb_short, self.user_embedding)
         self._xent_loss_weight(self.user_eb, self.seq_multi)
         self.summary_loss()
+    
+    def gate_user_eb(self, long_user_embedding, user_eb_short, user_embedding):
+        gate_input = concat_func([long_user_embedding, user_eb_short, user_embedding])  # 20*256
+        gate = tf.keras.layers.Dense(self.output_units, activation='sigmoid')(gate_input)
+        gate_output = tf.keras.layers.Lambda(lambda x: tf.multiply(x[0], x[1]) \
+            + tf.multiply(1 - x[0], x[2]))([gate, user_eb_short, long_user_embedding])
+        user_eb = self.l2_normalize(gate_output)
+        return user_eb
         
     def l2_normalize(self, x, axis = -1):
         return tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis))(x)
