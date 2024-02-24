@@ -491,21 +491,21 @@ class Model_SINE_LI(Model):
                     shape=[self.num_topic, self.dim],
                     name='topic_embedding')
 
-        self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)  # ?,2,128
+        self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)  # ?,category_num,128
         self.user_eb_short = self.labeled_attention(self.seq_multi)  # ?*128
 
         self.long_user_embedding = self.attention_level_one(self.user_embedding, self.item_emb,
-                                                            self.the_first_w, self.the_first_bias)  # (128,)  why is this
+                                                            self.the_first_w, self.the_first_bias)  # (?, 128)
         self.user_eb = self.gate_user_eb(self.long_user_embedding, self.user_eb_short, self.user_embedding)
         self._xent_loss_weight(self.user_eb, self.seq_multi)
         self.summary_loss()
     
     def gate_user_eb(self, long_user_embedding, user_eb_short, user_embedding):
-        gate_input = concat_func([long_user_embedding, user_eb_short, user_embedding])  # 20*256
-        gate = tf.keras.layers.Dense(self.output_units, activation='sigmoid')(gate_input)
+        gate_input = concat_func([long_user_embedding, user_eb_short, user_embedding])  # (?, 128+128+128)
+        gate = tf.keras.layers.Dense(self.output_units, activation='sigmoid')(gate_input)  # (?, 128)
         gate_output = tf.keras.layers.Lambda(lambda x: tf.multiply(x[0], x[1]) \
-            + tf.multiply(1 - x[0], x[2]))([gate, user_eb_short, long_user_embedding])
-        user_eb = self.l2_normalize(gate_output)
+            + tf.multiply(1 - x[0], x[2]))([gate, user_eb_short, long_user_embedding])  # (?, 128)
+        user_eb = self.l2_normalize(gate_output)  # (?, 128)
         return user_eb
         
     def l2_normalize(self, x, axis = -1):

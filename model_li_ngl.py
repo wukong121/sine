@@ -464,10 +464,10 @@ class PrototypicalDispatcher(object):
         return y  # [B,H]
 
 
-class Model_SINE_LI_NO_GATE(Model):
+class Model_SINE_LI_NGL(Model):
     def __init__(self, n_mid, user_count, embedding_dim, hidden_size, output_size, batch_size, seq_len, topic_num, category_num, alpha,
                  neg_num, cpt_feat, user_norm, item_norm, cate_norm, n_head):
-        super(Model_SINE_LI, self).__init__(n_mid, user_count, embedding_dim, hidden_size, output_size, batch_size, seq_len, 
+        super(Model_SINE_LI_NGL, self).__init__(n_mid, user_count, embedding_dim, hidden_size, output_size, batch_size, seq_len, 
                                          flag="SINE", item_norm=item_norm)
         self.num_topic = topic_num
         self.category_num = category_num
@@ -491,21 +491,26 @@ class Model_SINE_LI_NO_GATE(Model):
                     shape=[self.num_topic, self.dim],
                     name='topic_embedding')
 
-        self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)  # ?,2,128
-        self.user_eb_short = self.labeled_attention(self.seq_multi)  # ?*128
-
+        self.seq_multi = self.sequence_encode_cpt(self.item_emb, self.nbr_mask)  # ?,category_num,128
         self.long_user_embedding = self.attention_level_one(self.user_embedding, self.item_emb,
-                                                            self.the_first_w, self.the_first_bias)  # (128,)  why is this
-        self.user_eb = self.gate_user_eb(self.long_user_embedding, self.user_eb_short, self.user_embedding)
+                                                            self.the_first_w, self.the_first_bias)  # (?, 128)
+        self.user_eb = self._concate_multi_seq(self.seq_multi, self.long_user_embedding)
         self._xent_loss_weight(self.user_eb, self.seq_multi)
         self.summary_loss()
+
+    def _concate_multi_seq(self, seq_multi, long_user_embedding):
+        splits = [tf.squeeze(seq, axis=1) for seq in tf.split(seq_multi, num_or_size_splits=self.category_num, axis=1)]
+        splits.append(long_user_embedding)
+        seq_multi_cat = tf.concat(splits, axis=1)
+        user_eb = tf.keras.layers.Dense(self.output_units, activation='relu')(seq_multi_cat)
+        return user_eb
     
     def gate_user_eb(self, long_user_embedding, user_eb_short, user_embedding):
-        gate_input = concat_func([long_user_embedding, user_eb_short, user_embedding])  # 20*256
-        gate = tf.keras.layers.Dense(self.output_units, activation='sigmoid')(gate_input)
+        gate_input = concat_func([long_user_embedding, user_eb_short, user_embedding])  # (?, 128+128+128)
+        gate = tf.keras.layers.Dense(self.output_units, activation='sigmoid')(gate_input)  # (?, 128)
         gate_output = tf.keras.layers.Lambda(lambda x: tf.multiply(x[0], x[1]) \
-            + tf.multiply(1 - x[0], x[2]))([gate, user_eb_short, long_user_embedding])
-        user_eb = self.l2_normalize(gate_output)
+            + tf.multiply(1 - x[0], x[2]))([gate, user_eb_short, long_user_embedding])  # (?, 128)
+        user_eb = self.l2_normalize(gate_output)  # (?, 128)
         return user_eb
         
     def l2_normalize(self, x, axis = -1):
@@ -550,28 +555,6 @@ class Model_SINE_LI_NO_GATE(Model):
             else:
                 seq = tf.reshape(seq, [-1, self.dim])
         return seq
-
-    def labeled_attention(self, seq):
-        # item_emb = tf.reshape(self.cate_dist, [-1, self.hist_max, self.category_num])
-        item_emb = tf.transpose(self.cate_dist, [0, 2, 1])
-        item_emb = tf.matmul(item_emb, self.batch_tpt_emb)
-
-        if self.cpt_feat:
-            item_emb = item_emb + tf.reshape(self.item_emb, [-1, self.hist_max, self.dim])
-        target_item = self.sequence_encode_concept(item_emb, self.nbr_mask)#[N,  D]
-
-        mu_seq = tf.reduce_mean(seq, axis=1)  # [N,H,D] -> [N,D]，意图序列
-        target_label = tf.concat([mu_seq, target_item], axis=1)
-
-        mu = tf.layers.dense(target_label, self.dim, name='maha_cpt2', reuse=tf.AUTO_REUSE)  # D维，预测的下一个意图
-
-        wg = tf.matmul(seq, tf.expand_dims(mu, axis=-1))  # (H,D)x(D,1)，不同兴趣的聚合权重
-        wg = tf.nn.softmax(wg, dim=1)
-
-        user_emb = tf.reduce_sum(seq * wg, axis=1)  # [N,H,D]->[N,D]
-        if self.user_norm:
-            user_emb = tf.nn.l2_normalize(user_emb, dim=-1)
-        return user_emb
 
     def seq_aggre(self, item_list_emb, nbr_mask):
         num_aggre = 1

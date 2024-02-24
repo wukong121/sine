@@ -10,6 +10,7 @@ import numpy as np
 from data_iterator import DataIterator
 from model_li import Model_SINE_LI
 from model_ssl import Model_SINE_SSL
+from model_li_ngl import Model_SINE_LI_NGL
 from metrics_rs import evaluate_full
 
 parser = argparse.ArgumentParser()
@@ -40,24 +41,36 @@ parser.add_argument('--item_norm', type=int, default=0)
 parser.add_argument('--cate_norm', type=int, default=0)
 parser.add_argument('--n_head', type=int, default=1)
 parser.add_argument('--output_size', type=int, default=128)
-parser.add_argument('--experiment', type=int, default=0, help="0 for Long-Intent, 1 for Self-supervised Learning")
+parser.add_argument('--experiment', type=int, default=0, \
+    help="0 for Long-Intent, "
+        + "1 for Self-supervised Learning, "
+        + "2 for Long-Intent without gate unit and label attention, "
+        + "3 for Long-Intent without gate unit, "
+        + "4 for Long-Intent without label attention")
 parser.add_argument('--temperature', type=float, default=1.0, help="softmax temperature (default:  1.0) - not studied.")
 parser.add_argument('--similarity_model_name', default='ItemCF_IUF', type=str, \
                         help="Method to generate item similarity score. choices: \
                         Random, ItemCF, ItemCF_IUF(Inverse user frequency), Item2Vec, LightGCN")
 
+exp_dict = {
+        0: ("li", Model_SINE_LI), 
+        1: ("ssl", Model_SINE_SSL), 
+        2: ("li-ngl", Model_SINE_LI_NGL),
+    }
+
 def get_model(dataset, model_type, item_count, user_count, args):
+    global exp_dict
     if not model_type == 'SINE':
         print("Invalid model_type : %s", model_type)
         return
-    if args.experiment == 0:
-        model = Model_SINE_LI(item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
-                        args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
-                        args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
-    else:
-        model = Model_SINE_SSL(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
+    if args.experiment == 1:
+        model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
                                args.topic_num, args.category_num, args.alpha, args.beta, args.neg_num, args.cpt_feat, 
                                args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+    else:
+        model = exp_dict[args.experiment][1](item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
+                        args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
+                        args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     return model
 
 def get_exp_name(dataset, model_type, topic_num, concept_num, maxlen, save=True):
@@ -113,10 +126,10 @@ def train(train_file, valid_file, test_file, log_path, best_model_path, similari
                         print('!!!! Test result epoch %d topk=%d hitrate=%.4f ndcg=%.4f' \
                             % (epoch, topk[k], metrics['hitrate'][k], metrics['ndcg'][k]))
                     break
-                if args.experiment == 0:
-                    loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
-                else:
+                if args.experiment == 1:
                     loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
+                else:
+                    loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
                 loss_iter += loss
                 iter += 1
                 global_iter += 1
@@ -152,7 +165,7 @@ def train(train_file, valid_file, test_file, log_path, best_model_path, similari
     return best_epoch
 
 
-def test(train_file, valid_file, test_file, best_model_path, args):
+def test(train_file, valid_file, test_file, best_model_path, similarity_model_path, args):
     dataset = args.dataset
     batch_size = args.batch_size
     maxlen = args.maxlen
@@ -173,7 +186,7 @@ def test(train_file, valid_file, test_file, best_model_path, args):
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         model.restore(sess, best_model_path)
 
-        test_data = DataIterator(test_file, batch_size, maxlen, train_flag=1)
+        test_data = DataIterator(test_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
 
         metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
         for k in range(len(topk)):
@@ -211,7 +224,7 @@ if __name__ == '__main__':
         args.user_count = 6040
         args.test_iter = 500
     elif args.dataset == 'book':
-        path = './data/book/'
+        path = './data/book_data/'
         args.user_count = 603669
         args.item_count = 367983    
         args.test_iter = 1000
@@ -229,19 +242,22 @@ if __name__ == '__main__':
     shanghai_tz = pytz.timezone('Asia/Shanghai')
     shanghai_time = utc_now.replace(tzinfo=pytz.utc).astimezone(shanghai_tz).strftime("%Y-%m-%d %H:%M")
 
-    log_path = "./log/{}-".format("li" if args.experiment == 0 else "ssl")+shanghai_time
+    log_path = "./log/{}-".format(exp_dict[args.experiment][0])+shanghai_time
     best_model_path = log_path + "/save_model/" + '%s' % args.dataset + '_%s' % args.model_type + '_topic%d' % args.topic_num \
                       + '_cept%d' % args.category_num + '_len%d' % args.maxlen + '_neg%d' % args.neg_num \
                       + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm \
                       + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha) + '_beta{}'.format(args.beta)
     similarity_model_path = os.path.join(path,\
         args.dataset+"_"+args.similarity_model_name+"_similarity.pkl")
+    print("similarity_model_path = ", similarity_model_path)
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print_configuration(args)
 
     best_epoch = train(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
-
-    test(train_file, valid_file, test_file, best_model_path, args)
+    # the following code are used to run test only
+    # best_model_path = "/home/wangshengmin/workspace/SINE/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.1"
+    # similarity_model_path = "./data/ml1m/ml1m_ItemCF_IUF_similarity.pkl"
+    test(train_file, valid_file, test_file, best_model_path, similarity_model_path, args)
     print('--> Finish!')

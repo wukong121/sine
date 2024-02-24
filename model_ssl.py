@@ -115,9 +115,9 @@ class Model(object):
         user_eb_augs: [(tf.Tensor shape=[?,128]), (tf.Tensor shape=[?,128])]
         '''
         batch_sample_one, batch_sample_two = user_eb_augs[0], user_eb_augs[1]
-        sim11 = tf.matmul(batch_sample_one, tf.transpose(batch_sample_one)) / self.temperature
-        sim22 = tf.matmul(batch_sample_two, tf.transpose(batch_sample_two)) / self.temperature
-        sim12 = tf.matmul(batch_sample_one, tf.transpose(batch_sample_two)) / self.temperature
+        sim11 = tf.matmul(batch_sample_one, tf.transpose(batch_sample_one)) / 1
+        sim22 = tf.matmul(batch_sample_two, tf.transpose(batch_sample_two)) / 1
+        sim12 = tf.matmul(batch_sample_one, tf.transpose(batch_sample_two)) / 1
         _, d = get_shape(sim12)
         sim11 = tf.linalg.set_diag(sim11, tf.fill([d], float('-inf')))
         sim22 = tf.linalg.set_diag(sim22, tf.fill([d], float('-inf')))
