@@ -12,6 +12,7 @@ from model_li import Model_SINE_LI
 from model_ssl import Model_SINE_SSL
 from model_li_ngl import Model_SINE_LI_NGL
 from model_li_ng import Model_SINE_LI_NG
+from model_li_nl import Model_SINE_LI_NL
 from metrics_rs import evaluate_full
 
 parser = argparse.ArgumentParser()
@@ -57,7 +58,8 @@ exp_dict = {
     0: ("li", Model_SINE_LI), 
     1: ("ssl", Model_SINE_SSL), 
     2: ("li-ngl", Model_SINE_LI_NGL),
-    3: ("li-ng", Model_SINE_LI_NG)
+    3: ("li-ng", Model_SINE_LI_NG),
+    4: ("li-nl", Model_SINE_LI_NL)
 }
 
 def get_model(dataset, model_type, item_count, user_count, args):
