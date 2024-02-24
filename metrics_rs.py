@@ -482,10 +482,10 @@ def evaluate_full(sess, test_data, model, dim):
         except StopIteration:
             break
         t1 = time.time()
-        if type(model) == Model_SINE_LI:
-            user_embs = model.output_user(sess, hist_item, nbr_mask, user_id)  # 获取用户的嵌入表示
-        else:
+        if type(model) == Model_SINE_SSL:
             user_embs = model.output_user(sess, hist_item, nbr_mask)
+        else:
+            user_embs = model.output_user(sess, hist_item, nbr_mask, user_id)  # 获取用户的嵌入表示
         t2 = time.time()
         inference_time.append(t2 - t1)
         if len(user_embs.shape) == 2:
