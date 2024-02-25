@@ -77,98 +77,6 @@ def get_model(dataset, model_type, item_count, user_count, args):
                         args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     return model
 
-def get_exp_name(dataset, model_type, topic_num, concept_num, maxlen, save=True):
-    para_name = '_'.join([dataset, model_type, 't'+str(topic_num), 'c'+str(concept_num), 'len'+str(maxlen)])
-    return para_name
-
-def train(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args):
-    global global_iter
-    dataset = args.dataset
-    batch_size = args.batch_size
-    maxlen = args.maxlen
-    item_count = args.item_count
-    user_count = args.user_count
-    model_type = args.model_type
-    topic_num = args.topic_num
-    concept_num = args.category_num
-    patience = args.patience
-    test_iter = args.test_iter
-    topk = [10, 50, 100]
-    best_metric = 0
-    best_metric_ndcg = 0
-    best_epoch = 0
-    summary_writer = tf.summary.FileWriter(log_path, tf.get_default_graph())
-    gpu_options = tf.GPUOptions(allow_growth=True)
-
-    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        train_data = DataIterator(
-            train_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=0)
-        valid_data = DataIterator(
-            valid_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
-        test_data = DataIterator(
-            test_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
-        
-        model = get_model(dataset, model_type, item_count, user_count, args)
-        
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
-
-        print('---> Start training...')
-
-        for epoch in range(args.epoch):
-            print('--> Epoch {} / {}'.format(epoch, args.epoch))
-            trials = 0
-            iter = 0
-            loss_iter = 0.0
-            start_time = time.time()
-            while True:
-                try:
-                    hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment = train_data.next()
-                except StopIteration:
-                    metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
-                    for k in range(len(topk)):
-                        print('!!!! Test result epoch %d topk=%d hitrate=%.4f ndcg=%.4f' \
-                            % (epoch, topk[k], metrics['hitrate'][k], metrics['ndcg'][k]))
-                    break
-                if args.experiment == 1:
-                    loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
-                else:
-                    loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
-                loss_iter += loss
-                iter += 1
-                global_iter += 1
-                if iter % test_iter == 0:
-                    print('--> Epoch {} / {} at iter {} loss {}'.format(epoch, args.epoch, iter, loss))
-                summary_writer.add_summary(summary, global_iter)
-                
-            metrics = evaluate_full(sess, valid_data, model, args.embedding_dim)
-            for k in range(len(topk)):
-                print('!!!! Validate result topk=%d hitrate=%.4f ndcg=%.4f' % (topk[k], metrics['hitrate'][k],
-                                                                               metrics['ndcg'][k]))
-            if 'hitrate' in metrics:
-                hitrate = metrics['hitrate'][0]
-                # ndcg = metrics['ndcg'][0]
-                hitrate2 = metrics['ndcg'][1]
-                if hitrate >= best_metric and hitrate2 >= best_metric_ndcg:
-                    best_metric = hitrate
-                    best_metric_ndcg = hitrate2
-                    # best_metric_ndcg = ndcg
-                    model.save(sess, best_model_path)
-                    trials = 0
-                    best_epoch = epoch
-                    print('---> Current best valid hitrate=%.4f ndcg=%.4f' % (best_metric, best_metric_ndcg))
-                else:
-                    trials += 1
-                    if trials > patience:
-                        break
-
-            test_time = time.time()
-            print("time interval for one epoch: %.4f min" % ((test_time - start_time) / 60.0))
-        summary_writer.close()    
-    print('!!! Best epoch is %d' % best_epoch)
-    return best_epoch
-
-
 def test(train_file, valid_file, test_file, best_model_path, similarity_model_path, args):
     dataset = args.dataset
     batch_size = args.batch_size
@@ -180,7 +88,6 @@ def test(train_file, valid_file, test_file, best_model_path, similarity_model_pa
     concept_num = args.category_num
     patience = args.patience
     test_iter = args.test_iter
-    # exp_name = get_exp_name(dataset, model_type, topic_num, concept_num, maxlen)
     topk = [10, 50, 100]
     tf.reset_default_graph()
     gpu_options = tf.GPUOptions(allow_growth=True)
@@ -242,23 +149,11 @@ if __name__ == '__main__':
     valid_file = path + args.dataset + '_valid.txt'
     test_file = path + args.dataset + '_test.txt'
 
-    utc_now = datetime.datetime.utcnow()
-    shanghai_tz = pytz.timezone('Asia/Shanghai')
-    shanghai_time = utc_now.replace(tzinfo=pytz.utc).astimezone(shanghai_tz).strftime("%Y-%m-%d %H:%M")
-
-    log_path = "./log/{}-".format(exp_dict[args.experiment][0])+shanghai_time
-    best_model_path = log_path + "/save_model/" + '%s' % args.dataset + '_%s' % args.model_type + '_topic%d' % args.topic_num \
-                      + '_cept%d' % args.category_num + '_len%d' % args.maxlen + '_neg%d' % args.neg_num \
-                      + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm \
-                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha) + '_beta{}'.format(args.beta)
-    similarity_model_path = os.path.join(path,\
-        args.dataset+"_"+args.similarity_model_name+"_similarity.pkl")
-    print("similarity_model_path = ", similarity_model_path)
-
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print_configuration(args)
 
-    best_epoch = train(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
+    best_model_path = "/home/wangshengmin/workspace/SINE/log/ssl-2024-02-23 21:02/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.1"
+    similarity_model_path = "./data/ml1m/ml1m_ItemCF_IUF_similarity.pkl"
     test(train_file, valid_file, test_file, best_model_path, similarity_model_path, args)
     print('--> Finish!')
