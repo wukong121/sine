@@ -77,7 +77,7 @@ def get_model(dataset, model_type, item_count, user_count, args):
                         args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
     return model
 
-def test(train_file, valid_file, test_file, best_model_path, similarity_model_path, args):
+def test(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args):
     dataset = args.dataset
     batch_size = args.batch_size
     maxlen = args.maxlen
@@ -97,13 +97,16 @@ def test(train_file, valid_file, test_file, best_model_path, similarity_model_pa
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         model.restore(sess, best_model_path)
 
-        test_data = DataIterator(test_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
+        test_data = DataIterator(test_file, similarity_model_path, args.similarity_model_name, \
+            args.dataset, batch_size, maxlen, train_flag=1)
 
         metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
-        for k in range(len(topk)):
-            print('!!!! Test result topk=%d hitrate=%.4f ndcg=%.4f' % (topk[k], metrics['hitrate'][k],
-                                                                           metrics['ndcg'][k]))
-
+        with open(log_path + '/evaluation_results.txt', 'w') as file:
+            for k in range(len(topk)):
+                result_str = '!!!! Test result topk=%d hitrate=%.4f ndcg=%.4f \n' \
+                    % (topk[k], metrics['hitrate'][k], metrics['ndcg'][k])
+                print(result_str)
+                file.write(result_str)
 
 def print_configuration(args):
     print('--> Experiment configuration')
@@ -153,7 +156,8 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print_configuration(args)
 
-    best_model_path = "/home/wangshengmin/workspace/SINE/log/ssl-2024-02-23 21:02/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.1"
+    best_model_path = "/home/wangshengmin/workspace/SINE/log/ssl-2024-02-24 15:23/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta1.0"
+    log_path = os.path.dirname(os.path.dirname(best_model_path))
     similarity_model_path = "./data/ml1m/ml1m_ItemCF_IUF_similarity.pkl"
-    test(train_file, valid_file, test_file, best_model_path, similarity_model_path, args)
+    test(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
     print('--> Finish!')

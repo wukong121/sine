@@ -9,7 +9,7 @@ import numpy as np
 
 from data_iterator import DataIterator
 from model_li import Model_SINE_LI
-from model_ssl import Model_SINE_SSL
+from model_ssl_copy import Model_SINE_SSL
 from model_li_ngl import Model_SINE_LI_NGL
 from model_li_ng import Model_SINE_LI_NG
 from model_li_nl import Model_SINE_LI_NL
@@ -168,8 +168,7 @@ def train(train_file, valid_file, test_file, log_path, best_model_path, similari
     print('!!! Best epoch is %d' % best_epoch)
     return best_epoch
 
-
-def test(train_file, valid_file, test_file, best_model_path, similarity_model_path, args):
+def test(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args):
     dataset = args.dataset
     batch_size = args.batch_size
     maxlen = args.maxlen
@@ -190,13 +189,16 @@ def test(train_file, valid_file, test_file, best_model_path, similarity_model_pa
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         model.restore(sess, best_model_path)
 
-        test_data = DataIterator(test_file, similarity_model_path, args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
+        test_data = DataIterator(test_file, similarity_model_path, \
+            args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
 
         metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
-        for k in range(len(topk)):
-            print('!!!! Test result topk=%d hitrate=%.4f ndcg=%.4f' % (topk[k], metrics['hitrate'][k],
-                                                                           metrics['ndcg'][k]))
-
+        with open(log_path + '/evaluation_results.txt', 'w') as file:
+            for k in range(len(topk)):
+                result_str = '!!!! Test result topk=%d hitrate=%.4f ndcg=%.4f \n' \
+                    % (topk[k], metrics['hitrate'][k], metrics['ndcg'][k])
+                print(result_str)
+                file.write(result_str)
 
 def print_configuration(args):
     print('--> Experiment configuration')
@@ -260,5 +262,5 @@ if __name__ == '__main__':
     print_configuration(args)
 
     best_epoch = train(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
-    test(train_file, valid_file, test_file, best_model_path, similarity_model_path, args)
+    test(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
     print('--> Finish!')
