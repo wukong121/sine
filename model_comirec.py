@@ -10,6 +10,7 @@ class Model(object):
         self.batch_size = batch_size
         self.n_mid = n_mid
         self.neg_num = 10
+        self.dim = embedding_dim
         with tf.name_scope('Inputs'):
             self.mid_his_batch_ph = tf.placeholder(tf.int32, [None, None], name='mid_his_batch_ph')
             self.uid_batch_ph = tf.placeholder(tf.int32, [None, ], name='uid_batch_ph')
@@ -32,7 +33,16 @@ class Model(object):
 
 
     def build_sampled_softmax_loss(self, item_emb, user_emb):
-        self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias, tf.reshape(self.mid_batch_ph, [-1, 1]), user_emb, self.neg_num * self.batch_size, self.n_mid))
+        self.loss = tf.reduce_mean(
+            tf.nn.sampled_softmax_loss(
+                weights=self.mid_embeddings_var, 
+                biases=self.mid_embeddings_bias, 
+                labels=tf.reshape(self.mid_batch_ph, [-1, 1]), 
+                inputs=tf.reshape(user_emb, [-1, self.dim]), 
+                num_sampled=self.neg_num * self.batch_size, 
+                num_classes=self.n_mid
+            )
+        )
 
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
 

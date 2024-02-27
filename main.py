@@ -57,7 +57,7 @@ parser.add_argument('--similarity_model_name', default='ItemCF_IUF', type=str, \
                         Random, ItemCF, ItemCF_IUF(Inverse user frequency), Item2Vec, LightGCN")
 
 exp_dict = {
-    -1: {"baseline", None}, 
+    -1: ("baseline", None), 
     0: ("li", Model_SINE_LI), 
     1: ("ssl", Model_SINE_SSL), 
     2: ("li-ngl", Model_SINE_LI_NGL),
@@ -67,9 +67,6 @@ exp_dict = {
 
 def get_model(dataset, model_type, item_count, user_count, args):
     global exp_dict
-    if not model_type == 'SINE':
-        print("Invalid model_type : %s", model_type)
-        return
     if model_type == 'SINE':
         if args.experiment == 1:
             model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
@@ -91,7 +88,7 @@ def get_model(dataset, model_type, item_count, user_count, args):
     elif model_type == 'ComiRec-SA':
         model = Model_ComiRec_SA(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.num_interest, args.maxlen)
     else:
-        print ("Invalid model_type : %s", model_type)
+        print ("Invalid model_type: ", model_type)
         return
     return model
 
