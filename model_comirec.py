@@ -35,8 +35,8 @@ class Model(object):
     def build_sampled_softmax_loss(self, item_emb, user_emb):
         self.loss = tf.reduce_mean(
             tf.nn.sampled_softmax_loss(
-                weights=self.mid_embeddings_var, 
-                biases=self.mid_embeddings_bias, 
+                weights=self.mid_embeddings_var,  # (3706, 128)
+                biases=self.mid_embeddings_bias,  # (3706)
                 labels=tf.reshape(self.mid_batch_ph, [-1, 1]), 
                 inputs=tf.reshape(user_emb, [-1, self.dim]), 
                 num_sampled=self.neg_num * self.batch_size, 
@@ -93,7 +93,8 @@ class Model_DNN(Model):
         masks = tf.concat([tf.expand_dims(self.mask, -1) for _ in range(embedding_dim)], axis=-1)
 
         self.item_his_eb_mean = tf.reduce_sum(self.item_his_eb, 1) / (tf.reduce_sum(tf.cast(masks, dtype=tf.float32), 1) + 1e-9)
-        self.user_eb = tf.layers.dense(self.item_his_eb_mean, hidden_size, activation=None)
+        self.user_out = tf.layers.dense(self.item_his_eb_mean, hidden_size, activation=None)
+        self.user_eb = tf.layers.dense(self.user_out, embedding_dim, activation=tf.nn.relu)
         self.build_sampled_softmax_loss(self.item_eb, self.user_eb)
         self.summary_loss()
 
