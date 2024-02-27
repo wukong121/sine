@@ -13,6 +13,7 @@ from model_ssl_copy import Model_SINE_SSL
 from model_li_ngl import Model_SINE_LI_NGL
 from model_li_ng import Model_SINE_LI_NG
 from model_li_nl import Model_SINE_LI_NL
+from model_comirec import Model_DNN, Model_GRU4REC, Model_MIND, Model_ComiRec_DR, Model_ComiRec_SA
 from metrics_rs import evaluate_full
 
 parser = argparse.ArgumentParser()
@@ -28,7 +29,7 @@ parser.add_argument('--category_num', type=int, default=2)
 parser.add_argument('--topic_num', type=int, default=10)
 parser.add_argument('--neg_num', type=int, default=10)
 parser.add_argument('--cpt_feat', type=int, default=1)
-parser.add_argument('--model_type', type=str, default='SINE', help='SINE')
+parser.add_argument('--model_type', type=str, default='SINE', help='SINE|DNN|GRU4REC|MIND|ComiRec-DR|Model_ComiRec_SA')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='')
 parser.add_argument('--alpha', type=float, default=0.0, help='hyperparameter for interest loss (default: 0.0)')
 parser.add_argument('--beta', type=float, default=0.0, help='hyperparameter for contrastive loss (default: 0.0)')
@@ -44,7 +45,8 @@ parser.add_argument('--cate_norm', type=int, default=0)
 parser.add_argument('--n_head', type=int, default=1)
 parser.add_argument('--output_size', type=int, default=128)
 parser.add_argument('--experiment', type=int, default=0, \
-    help="0 for Long-Intent, "
+    help="-1 for Baselines, "
+        + "0 for Long-Intent, "
         + "1 for Self-supervised Learning, "
         + "2 for Long-Intent without gate unit and label attention, "
         + "3 for Long-Intent without gate unit, "
@@ -55,6 +57,7 @@ parser.add_argument('--similarity_model_name', default='ItemCF_IUF', type=str, \
                         Random, ItemCF, ItemCF_IUF(Inverse user frequency), Item2Vec, LightGCN")
 
 exp_dict = {
+    -1: {"baseline", None}, 
     0: ("li", Model_SINE_LI), 
     1: ("ssl", Model_SINE_SSL), 
     2: ("li-ngl", Model_SINE_LI_NGL),
@@ -67,14 +70,29 @@ def get_model(dataset, model_type, item_count, user_count, args):
     if not model_type == 'SINE':
         print("Invalid model_type : %s", model_type)
         return
-    if args.experiment == 1:
-        model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
-                               args.topic_num, args.category_num, args.alpha, args.beta, args.neg_num, args.cpt_feat, 
-                               args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+    if model_type == 'SINE':
+        if args.experiment == 1:
+            model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
+                                args.topic_num, args.category_num, args.alpha, args.beta, args.neg_num, args.cpt_feat, 
+                                args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+        else:
+            model = exp_dict[args.experiment][1](item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
+                            args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
+                            args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+    elif model_type == 'DNN': 
+        model = Model_DNN(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen)
+    elif model_type == 'GRU4REC': 
+        model = Model_GRU4REC(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen)
+    elif model_type == 'MIND':
+        relu_layer = True if dataset == 'book' else False
+        model = Model_MIND(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.num_interest, args.maxlen, relu_layer=relu_layer)
+    elif model_type == 'ComiRec-DR':
+        model = Model_ComiRec_DR(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.num_interest, args.maxlen)
+    elif model_type == 'ComiRec-SA':
+        model = Model_ComiRec_SA(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.num_interest, args.maxlen)
     else:
-        model = exp_dict[args.experiment][1](item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
-                        args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
-                        args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+        print ("Invalid model_type : %s", model_type)
+        return
     return model
 
 def get_exp_name(dataset, model_type, topic_num, concept_num, maxlen, save=True):
@@ -132,6 +150,8 @@ def train(train_file, valid_file, test_file, log_path, best_model_path, similari
                     break
                 if args.experiment == 1:
                     loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
+                elif args.experiment == -1:
+                    loss, summary = model.train(sess, [user_id, i_ids, hist_item, nbr_mask, args.learning_rate])
                 else:
                     loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
                 loss_iter += loss
@@ -248,7 +268,7 @@ if __name__ == '__main__':
     shanghai_tz = pytz.timezone('Asia/Shanghai')
     shanghai_time = utc_now.replace(tzinfo=pytz.utc).astimezone(shanghai_tz).strftime("%Y-%m-%d %H:%M")
 
-    log_path = "./log/{}-".format(exp_dict[args.experiment][0])+shanghai_time
+    log_path = "./log/{}-{}-".format(args.model_type, exp_dict[args.experiment][0])+shanghai_time
     best_model_path = log_path + "/save_model/" + '%s' % args.dataset + '_%s' % args.model_type + '_topic%d' % args.topic_num \
                       + '_cept%d' % args.category_num + '_len%d' % args.maxlen + '_neg%d' % args.neg_num \
                       + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm \

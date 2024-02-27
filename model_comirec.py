@@ -36,6 +36,12 @@ class Model(object):
 
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
 
+    
+    def summary_loss(self):
+        tf.summary.scalar('sampled_softmax_loss', self.loss)
+        self.merged_summary = tf.summary.merge_all()
+
+
     def train(self, sess, inps):
         feed_dict = {
             self.uid_batch_ph: inps[0],
@@ -44,8 +50,8 @@ class Model(object):
             self.mask: inps[3],
             self.lr: inps[4]
         }
-        loss, _ = sess.run([self.loss, self.optimizer], feed_dict=feed_dict)
-        return loss
+        loss, _, summary = sess.run([self.loss, self.optimizer, self.merged_summary], feed_dict=feed_dict)
+        return loss, summary
 
     def output_item(self, sess):
         item_embs = sess.run(self.mid_embeddings_var)
@@ -79,6 +85,7 @@ class Model_DNN(Model):
         self.item_his_eb_mean = tf.reduce_sum(self.item_his_eb, 1) / (tf.reduce_sum(tf.cast(masks, dtype=tf.float32), 1) + 1e-9)
         self.user_eb = tf.layers.dense(self.item_his_eb_mean, hidden_size, activation=None)
         self.build_sampled_softmax_loss(self.item_eb, self.user_eb)
+        self.summary_loss()
 
 class Model_GRU4REC(Model):
     def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, seq_len=256):
@@ -92,6 +99,7 @@ class Model_GRU4REC(Model):
 
         self.user_eb = final_state1
         self.build_sampled_softmax_loss(self.item_eb, self.user_eb)
+        self.summary_loss()
 
 
 def get_shape(inputs):
@@ -193,6 +201,7 @@ class Model_MIND(Model):
         self.user_eb, self.readout = capsule_network(item_his_emb, self.item_eb, self.mask)
 
         self.build_sampled_softmax_loss(self.item_eb, self.readout)
+        self.summary_loss()
 
 class Model_ComiRec_DR(Model):
     def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, hard_readout=True, relu_layer=False):
@@ -204,6 +213,7 @@ class Model_ComiRec_DR(Model):
         self.user_eb, self.readout = capsule_network(item_his_emb, self.item_eb, self.mask)
 
         self.build_sampled_softmax_loss(self.item_eb, self.readout)
+        self.summary_loss()
 
 class Model_ComiRec_SA(Model):
     def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, add_pos=True):
@@ -244,3 +254,4 @@ class Model_ComiRec_SA(Model):
         readout = tf.gather(tf.reshape(self.user_eb, [-1, self.dim]), tf.argmax(atten, axis=1, output_type=tf.int32) + tf.range(tf.shape(item_list_emb)[0]) * num_heads)
 
         self.build_sampled_softmax_loss(self.item_eb, readout)
+        self.summary_loss()
