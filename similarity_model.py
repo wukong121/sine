@@ -9,6 +9,7 @@ class OfflineItemSimilarity:
         dataset_name='Sports_and_Outdoors'):
         self.dataset_name = dataset_name
         self.similarity_path = similarity_path
+        self.itemSimBest = dict()
         # train_data_list used for item2vec, train_data_dict used for itemCF and itemCF-IUF
         self.train_data_list, self.train_item_list, self.train_data_dict = self._load_train_data(data_file)
         self.model_name = model_name
@@ -64,12 +65,17 @@ class OfflineItemSimilarity:
             items.append(item)
         return train_data_list, set(train_data_set_list), self._convert_data_to_dict(train_data)
 
-    def _generate_item_similarity(self,train=None, save_path='./'):
+    def _generate_item_similarity(self, seg_id=0, train=None):
         """
         calculate co-rated users between items
         """
         print("getting item similarity...")
         train = train or self.train_data_dict
+        seg_len = int(len(train) / 4)  # split the train dataset to 4 part, distributed processing 
+        if seg_id == 3:
+            train = dict(list(train.items())[seg_id*seg_len:])
+        else:
+            train = dict(list(train.items())[seg_id*seg_len: (seg_id+1)*seg_len])
         C = dict()
         N = dict()
 
@@ -97,7 +103,6 @@ class OfflineItemSimilarity:
                             C.setdefault(i,{})
                             C[i].setdefault(j,0)
                             C[i][j] += 1 / math.log(1 + len(items) * 1.0)
-            self.itemSimBest = dict()
             print("Step 2: Compute co-rate matrix")
             c_iter = tqdm(enumerate(C.items()), total=len(C.items()))
             for idx, (cur_item, related_items) in c_iter:
@@ -105,7 +110,6 @@ class OfflineItemSimilarity:
                 for related_item, score in related_items.items():
                     self.itemSimBest[cur_item].setdefault(related_item,0);
                     self.itemSimBest[cur_item][related_item] = score / math.sqrt(N[cur_item] * N[related_item])
-            self._save_dict(self.itemSimBest, save_path=save_path)
         elif self.model_name == 'Item2Vec':
             # details here: https://github.com/RaRe-Technologies/gensim/blob/develop/gensim/models/word2vec.py
             print("Step 1: train item2vec model")
@@ -123,20 +127,20 @@ class OfflineItemSimilarity:
                     self.itemSimBest[cur_item].setdefault(related_item,0)
                     self.itemSimBest[cur_item][related_item] = score
             print("Item2Vec model saved to: ", save_path)
-            self._save_dict(self.itemSimBest, save_path=save_path)
         elif self.model_name == 'LightGCN':
             # train a item embedding from lightGCN model, and then convert to sim dict
             print("generating similarity model..")
             itemSimBest = light_gcn.generate_similarity_from_light_gcn(self.dataset_name)
-            print("LightGCN based model saved to: ", save_path)
-            self._save_dict(itemSimBest, save_path=save_path)
+            print("LightGCN based model saved to: ", save_path)  
 
     def load_similarity_model(self, similarity_model_path):
         if not similarity_model_path:
             raise ValueError('invalid path')
         elif not os.path.exists(similarity_model_path):
             print("the similirity dict not exist, generating...")
-            self._generate_item_similarity(save_path=self.similarity_path)
+            for seg_id in range(4):
+                self._generate_item_similarity(seg_id=seg_id)
+            self._save_dict(self.itemSimBest, save_path=self.similarity_path)
         if self.model_name in ['ItemCF', 'ItemCF_IUF', 'Item2Vec', 'LightGCN']:
             with open(similarity_model_path, 'rb') as read_file:
                 similarity_dict = pickle.load(read_file)
@@ -175,8 +179,8 @@ class OfflineItemSimilarity:
 
 if __name__ == "__main__":
     similarity_model = OfflineItemSimilarity(
-        data_file="./data/ml1m/ml1m_train.txt", 
-        similarity_path="./data/ml1m/ml1m_ItemCF_IUF_similarity.pkl", 
+        data_file="./data/book_data/book_train.txt", 
+        similarity_path="./data/book_data/book_ItemCF_IUF_similarity.pkl", 
         model_name="ItemCF_IUF", 
-        dataset_name="ml1m"
+        dataset_name="book"
     )

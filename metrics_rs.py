@@ -7,7 +7,7 @@ from sklearn import metrics
 import multiprocessing as mp
 import time
 from model_li import Model_SINE_LI
-from model_ssl import Model_SINE_SSL
+from model_ssl_copy import Model_SINE_SSL
 
 
 def recall(rank, ground_truth, N):

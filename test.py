@@ -156,7 +156,7 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print_configuration(args)
 
-    best_model_path = "/home/wangshengmin/workspace/SINE/log/ssl-2024-02-24 15:23/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta1.0"
+    best_model_path = "/home/wangshengmin/workspace/SINE/log/ssl-2024-02-21 02:30/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.1"
     log_path = os.path.dirname(os.path.dirname(best_model_path))
     similarity_model_path = "./data/ml1m/ml1m_ItemCF_IUF_similarity.pkl"
     test(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
