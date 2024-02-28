@@ -140,7 +140,7 @@ def train(train_file, valid_file, test_file, log_path, best_model_path, similari
                 try:
                     hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment = train_data.next()  # (128,20), (128,20), (128,), (128,), (2,128,20)
                 except StopIteration:
-                    metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
+                    metrics = evaluate_full(sess, test_data, model, args)
                     for k in range(len(topk)):
                         print('!!!! Test result epoch %d topk=%d hitrate=%.4f ndcg=%.4f' \
                             % (epoch, topk[k], metrics['hitrate'][k], metrics['ndcg'][k]))
@@ -158,7 +158,7 @@ def train(train_file, valid_file, test_file, log_path, best_model_path, similari
                     print('--> Epoch {} / {} at iter {} loss {}'.format(epoch, args.epoch, iter, loss))
                 summary_writer.add_summary(summary, global_iter)
                 
-            metrics = evaluate_full(sess, valid_data, model, args.embedding_dim)
+            metrics = evaluate_full(sess, valid_data, model, args)
             for k in range(len(topk)):
                 print('!!!! Validate result topk=%d hitrate=%.4f ndcg=%.4f' % (topk[k], metrics['hitrate'][k],
                                                                                metrics['ndcg'][k]))
@@ -209,7 +209,7 @@ def test(train_file, valid_file, test_file, log_path, best_model_path, similarit
         test_data = DataIterator(test_file, similarity_model_path, \
             args.similarity_model_name, args.dataset, batch_size, maxlen, train_flag=1)
 
-        metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
+        metrics = evaluate_full(sess, test_data, model, args)
         with open(log_path + '/evaluation_results.txt', 'w') as file:
             for k in range(len(topk)):
                 result_str = '!!!! Test result topk=%d hitrate=%.4f ndcg=%.4f \n' \

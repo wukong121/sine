@@ -6,8 +6,6 @@ import faiss
 from sklearn import metrics
 import multiprocessing as mp
 import time
-from model_li import Model_SINE_LI
-from model_ssl_copy import Model_SINE_SSL
 
 
 def recall(rank, ground_truth, N):
@@ -457,7 +455,7 @@ def evaluation(input_data, train_label_dict, test_label_dict,
         print('\n topk={} recall={} ndcg={} auc={} precision={} f1={}'.format(topk[k], recall_[k], ndcg[k], auc, precision[k], f1[k]))
 
 
-def evaluate_full(sess, test_data, model, dim):
+def evaluate_full(sess, test_data, model, args):
     topN = 100
     topk = [50, 100]
     if mp.cpu_count() > 4:
@@ -468,7 +466,7 @@ def evaluate_full(sess, test_data, model, dim):
 
     item_embs = model.output_item(sess)  # 获取物品的嵌入表示
     # item_embs = model.output_item2(sess)
-    index = faiss.IndexFlatIP(dim)
+    index = faiss.IndexFlatIP(args.embedding_dim)
     index.add(item_embs)  # 构建Faiss索引
 
     total_ndcg = []
@@ -482,7 +480,7 @@ def evaluate_full(sess, test_data, model, dim):
         except StopIteration:
             break
         t1 = time.time()
-        if type(model) == Model_SINE_SSL:
+        if args.experiment == 1 or args.experiment == -1:
             user_embs = model.output_user(sess, hist_item, nbr_mask)
         else:
             user_embs = model.output_user(sess, hist_item, nbr_mask, user_id)  # 获取用户的嵌入表示
