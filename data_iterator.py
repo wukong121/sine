@@ -28,7 +28,7 @@ class DataIterator:
         self.read(source)
         self.users = list(self.users)
         self.items = list(self.items)
-        self.n_views = 5
+        self.n_views = 3
         # self.similarity_model = OfflineItemSimilarity(
         #     data_file=self.source, 
         #     similarity_path=self.similarity_model_path, 
