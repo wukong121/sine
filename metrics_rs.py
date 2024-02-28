@@ -480,8 +480,10 @@ def evaluate_full(sess, test_data, model, args):
         except StopIteration:
             break
         t1 = time.time()
-        if args.experiment == 1 or args.experiment == -1:
+        if args.experiment == 1:
             user_embs = model.output_user(sess, hist_item, nbr_mask)
+        elif args.experiment == -1:
+            user_embs = model.output_user(sess, [hist_item, nbr_mask])
         else:
             user_embs = model.output_user(sess, hist_item, nbr_mask, user_id)  # 获取用户的嵌入表示
         t2 = time.time()
