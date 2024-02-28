@@ -115,10 +115,9 @@ class Model(object):
         '''
         user_eb_augs: [(tf.Tensor shape=[?,128]), ...] length: self.category_num * 2
         '''
-        idx_comb = list(itertools.combinations([i for i in range(len(user_eb_augs))], 2))
         nce_loss = 0
-        for i, j in idx_comb:
-            batch_sample_one, batch_sample_two = user_eb_augs[i], user_eb_augs[j]
+        for i in range(self.category_num):
+            batch_sample_one, batch_sample_two = user_eb_augs[i], user_eb_augs[i+self.category_num]
             nce_loss += self._calculate_cl_loss(batch_sample_one, batch_sample_two)
         return nce_loss
 
