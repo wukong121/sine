@@ -29,13 +29,14 @@ class DataIterator:
         self.users = list(self.users)
         self.items = list(self.items)
         self.n_views = 5
-        self.similarity_model = OfflineItemSimilarity(
-            data_file=self.source, 
-            similarity_path=self.similarity_model_path, 
-            model_name=self.similarity_model_name, 
-            dataset_name=self.dataset_name
-        )
-        self.data_augmentation_methods = [Mask(), Reorder(), Insert(self.similarity_model), Substitute(self.similarity_model), Crop()]
+        # self.similarity_model = OfflineItemSimilarity(
+        #     data_file=self.source, 
+        #     similarity_path=self.similarity_model_path, 
+        #     model_name=self.similarity_model_name, 
+        #     dataset_name=self.dataset_name
+        # )
+        # self.data_augmentation_methods = [Mask(), Reorder(), Insert(self.similarity_model), Substitute(self.similarity_model), Crop()]
+        self.data_augmentation_methods = [Mask(), Reorder(), Crop()]
         self.augmentation_idx_list = list(itertools.combinations([i for i in range(self.n_views)], 2))
         self.total_augmentation_samples = len(self.augmentation_idx_list)
         self.cur_augmentation_idx_of_idx = 0
