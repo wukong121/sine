@@ -222,6 +222,11 @@ def print_configuration(args):
     for key, value in vars(args).items():
         print('{}: {}'.format(key, value))
 
+def save_configuration(args, file_path):
+    with open(file_path, 'w') as file:
+        for key, value in vars(args).items():
+            file.write("{}: {}/n".format(key, value))
+
 
 if __name__ == '__main__':
     global_iter = 0
@@ -277,6 +282,7 @@ if __name__ == '__main__':
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print_configuration(args)
+    save_configuration(args, log_path+"/args.txt")
 
     best_epoch = train(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
     test(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
