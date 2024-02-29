@@ -82,11 +82,11 @@ def get_model(dataset, model_type, item_count, user_count, args):
         model = Model_GRU4REC(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen)
     elif model_type == 'MIND':
         relu_layer = True if dataset == 'book' else False
-        model = Model_MIND(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.num_interest, args.maxlen, relu_layer=relu_layer)
+        model = Model_MIND(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.category_num, args.maxlen, relu_layer=relu_layer)
     elif model_type == 'ComiRec-DR':
-        model = Model_ComiRec_DR(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.num_interest, args.maxlen)
+        model = Model_ComiRec_DR(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.category_num, args.maxlen)
     elif model_type == 'ComiRec-SA':
-        model = Model_ComiRec_SA(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.num_interest, args.maxlen)
+        model = Model_ComiRec_SA(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.category_num, args.maxlen)
     else:
         print ("Invalid model_type: ", model_type)
         return
