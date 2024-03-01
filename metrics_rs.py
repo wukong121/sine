@@ -442,7 +442,7 @@ def evaluate_embedding_gmnn(ranking_user, pos_test_items):
     topk = [10, 50, 100]
     recall_, ndcg, hit_rate = evaluate_one_user_gmnn(topk, ranking_user, pos_test_items)
 
-    return ndcg, hit_rate
+    return recall_, ndcg, hit_rate
 
 
 def evaluation(input_data, train_label_dict, test_label_dict,
@@ -464,11 +464,12 @@ def evaluate_full(sess, test_data, model, args):
         cores = 1
     pool = mp.Pool(cores)
 
-    item_embs = model.output_item(sess)  # 获取物品的嵌入表示
+    item_embs = model.output_item(sess)  # 获取物品的嵌入表示 (item_count, embedding_dim)
     # item_embs = model.output_item2(sess)
     index = faiss.IndexFlatIP(args.embedding_dim)
     index.add(item_embs)  # 构建Faiss索引
 
+    total_recall = []
     total_ndcg = []
     total_hitrate = []
 
@@ -488,13 +489,16 @@ def evaluate_full(sess, test_data, model, args):
             user_embs = model.output_user(sess, hist_item, nbr_mask, user_id)  # 获取用户的嵌入表示
         t2 = time.time()
         inference_time.append(t2 - t1)
-        if len(user_embs.shape) == 2:
+        if len(user_embs.shape) == 2:  # (?, embedding_dim)
             D, recalled = index.search(user_embs, topN)  #根据用户嵌入表示进行最近邻检索
-            target_ids = [[i] for i in i_ids]
+            # target_ids = [[i] for i in i_ids]  # i_ids represents the last interacted item by each user in a batch
+            target_ids = [list(seq) for seq in hist_item]
             results_ = [
                 pool.apply(evaluate_embedding_gmnn, args=(recalled[i], iid_list)) for i, iid_list in enumerate(target_ids)]
-            ndcg = [user_result[0] for user_result in results_]
-            hitrate = [user_result[1] for user_result in results_]
+            recall = [user_result[0] for user_result in results_]
+            ndcg = [user_result[1] for user_result in results_]
+            hitrate = [user_result[2] for user_result in results_]
+            total_recall.extend(recall)
             total_ndcg.extend(ndcg)
             total_hitrate.extend(hitrate)
         else:
@@ -520,19 +524,23 @@ def evaluate_full(sess, test_data, model, args):
             results_ = [
                 pool.apply(evaluate_embedding_gmnn, args=(recalled[i], iid_list)) for i, iid_list in
                 enumerate(target_ids)]
-            ndcg = [user_result[0] for user_result in results_]
-            hitrate = [user_result[1] for user_result in results_]
+            recall = [user_result[0] for user_result in results_]
+            ndcg = [user_result[1] for user_result in results_]
+            hitrate = [user_result[2] for user_result in results_]
+            total_recall.extend(recall)
             total_ndcg.extend(ndcg)
             total_hitrate.extend(hitrate)
 
     pool.close()
+    total_recall = np.array(total_recall)
     total_ndcg = np.array(total_ndcg)
     total_hitrate = np.array(total_hitrate)
     print('total inference time is %.5f' % sum(inference_time))
-
+    
+    recall = np.mean(total_recall, axis=0)
     ndcg = np.mean(total_ndcg, axis=0)
     hitrate = np.mean(total_hitrate, axis=0)
-    return {'ndcg': ndcg, 'hitrate': hitrate}
+    return {'recall': recall, 'ndcg': ndcg, 'hitrate': hitrate}
 
 
 def evaluate_fulllarge(sess, data_loader, model, dim, mode='valid'):

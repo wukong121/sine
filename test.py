@@ -97,11 +97,11 @@ def test(train_file, valid_file, test_file, log_path, best_model_path, similarit
         test_data = DataIterator(test_file, similarity_model_path, args.similarity_model_name, \
             args.dataset, batch_size, maxlen, train_flag=1)
 
-        metrics = evaluate_full(sess, test_data, model, args.embedding_dim)
-        with open(log_path + '/evaluation_results.txt', 'w') as file:
+        metrics = evaluate_full(sess, test_data, model, args)
+        with open(log_path + '/evaluation_results_new.txt', 'w') as file:
             for k in range(len(topk)):
-                result_str = '!!!! Test result topk=%d hitrate=%.4f ndcg=%.4f \n' \
-                    % (topk[k], metrics['hitrate'][k], metrics['ndcg'][k])
+                result_str = '!!!! Test result topk=%d hitrate=%.4f ndcg=%.4f recall=%.4f \n' \
+                    % (topk[k], metrics['hitrate'][k], metrics['ndcg'][k], metrics['recall'][k])
                 print(result_str)
                 file.write(result_str)
 
