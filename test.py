@@ -93,43 +93,40 @@ def print_configuration(args):
     for key, value in vars(args).items():
         print('{}: {}'.format(key, value))
 
+def read_params_from_file(file_path):
+    params = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            key, value = line.strip().split(': ')
+            if value.isdigit():
+                params[key] = int(value)
+            elif '.' in value and all(c.isdigit() or c == '.' for c in value):
+                params[key] = float(value)
+            else:
+                params[key] = value
+    return params
+
 
 if __name__ == '__main__':
     global_iter = 0
     args = parser.parse_args()
+    params = read_params_from_file("/home/wangshengmin/workspace/SINE/log/SINE-ssl-2024-03-01 17:09/args.txt")
+    args.__dict__.update(params)
     SEED = args.random_seed
 
     tf.set_random_seed(SEED)
     np.random.seed(SEED)
     random.seed(SEED)
 
-    train_name = 'train'
-    valid_name = 'valid'
-    test_name = 'test'
-
     if args.dataset == 'taobao':
         path = './data/taobao/'
-        args.item_count = 1708531
-        args.user_count = 976780
-        args.test_iter = 1000
     if args.dataset == 'ml1m':
         path = './data/ml1m/'
-        args.item_count = 3706
-        args.user_count = 6040
-        args.test_iter = 500
     elif args.dataset == 'book':
         path = './data/book_data/'
-        args.user_count = 603669
-        args.item_count = 367983    
-        args.test_iter = 1000
     elif args.dataset == 'yzqytj':
         path = './data/yzqytj/'
-        args.user_count = 300890
-        args.item_count = 286411
-        args.test_iter = 1000
-    
-    train_file = path + args.dataset + '_train.txt'
-    valid_file = path + args.dataset + '_valid.txt'
+
     test_file = path + args.dataset + '_test.txt'
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
