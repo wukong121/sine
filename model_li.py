@@ -473,7 +473,7 @@ class Model_SINE_LI(Model):
         self.category_num = category_num
         self.hidden_units = hidden_size
         self.alpha_para = alpha
-        self.temperature = 0.07
+        self.temperature = 0.5
         # self.temperature = 0.1
         self.user_norm = user_norm
         self.item_norm = item_norm
