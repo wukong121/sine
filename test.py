@@ -110,8 +110,9 @@ def read_params_from_file(file_path):
 if __name__ == '__main__':
     global_iter = 0
     args = parser.parse_args()
-    params = read_params_from_file("/home/wangshengmin/workspace/SINE/log/SINE-ssl-2024-03-01 17:09/args.txt")
+    params = read_params_from_file("/home/wangshengmin/workspace/SINE/log/SINE-li-2024-03-01 17:14/args.txt")
     args.__dict__.update(params)
+    args.__dict__.update({"p": "test"})
     SEED = args.random_seed
 
     tf.set_random_seed(SEED)
@@ -130,11 +131,11 @@ if __name__ == '__main__':
     test_file = path + args.dataset + '_test.txt'
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     print_configuration(args)
 
-    # best_model_path = "/home/wangshengmin/workspace/SINE/log/ssl-2024-02-21 02:30/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.1"
-    best_model_path = "/root/workspace/SINE_LOCAL/log/GRU4REC-baseline-2024-02-29 11:24/save_model/ml1m_GRU4REC_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.0"
+    best_model_path = "/home/wangshengmin/workspace/SINE/log/SINE-li-2024-03-01 17:14/save_model/book_SINE_topic500_cept4_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.5_beta0.0"
+    # best_model_path = "/root/workspace/SINE_LOCAL/log/GRU4REC-baseline-2024-02-29 11:24/save_model/ml1m_GRU4REC_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.0"
     log_path = os.path.dirname(os.path.dirname(best_model_path))
     similarity_model_path = "./data/ml1m/ml1m_ItemCF_IUF_similarity.pkl"
     test(test_file, log_path, best_model_path, similarity_model_path, args)
