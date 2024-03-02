@@ -170,6 +170,7 @@ def evaluate_one_user(topk, ranking_user, pos_test_items):
 def evaluate_one_user_gmnn(topk, ranking_user, pos_test_items):
     recall_, ndcg_, hit_rate_ = [], [], []
     r = []
+    _r = []
     max_k = max(topk)
     ranking_user = ranking_user[0:max_k]
     for i in range(len(ranking_user)):
@@ -178,13 +179,17 @@ def evaluate_one_user_gmnn(topk, ranking_user, pos_test_items):
             r.append(1)
         else:
             r.append(0)
+        if item_ == pos_test_items[-1]:
+            _r.append(1)
+        else:
+            _r.append(0)
     for K in topk:
         recall_tem = recall_at_k(r, K, len(pos_test_items))
-        hit_rate = hit_at_k(r, K)
         recall_.append(recall_tem)
-        ndcg_.append(ndcg_at_k(r, K))
+        hit_rate = hit_at_k(_r, K)
         hit_rate_.append(hit_rate)
-
+        ndcg_.append(ndcg_at_k(_r, K))
+        
     return recall_, ndcg_, hit_rate_
 
 
@@ -477,7 +482,7 @@ def evaluate_full(sess, test_data, model, args):
 
     while True:
         try:
-            hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment = test_data.next()  # 获取测试数据
+            hist_item, nbr_mask, i_ids, user_id, _, item_raw = test_data.next()  # 获取测试数据
         except StopIteration:
             break
         t1 = time.time()
@@ -492,9 +497,9 @@ def evaluate_full(sess, test_data, model, args):
         if len(user_embs.shape) == 2:  # (?, embedding_dim)
             D, recalled = index.search(user_embs, topN)  #根据用户嵌入表示进行最近邻检索
             # target_ids = [[i] for i in i_ids]  # i_ids represents the last interacted item by each user in a batch
-            target_ids = [list(seq) for seq in hist_item]
+            # target_ids = [list(seq) for seq in hist_item]
             results_ = [
-                pool.apply(evaluate_embedding_gmnn, args=(recalled[i], iid_list)) for i, iid_list in enumerate(target_ids)]
+                pool.apply(evaluate_embedding_gmnn, args=(recalled[i], iid_list)) for i, iid_list in enumerate(item_raw)]
             recall = [user_result[0] for user_result in results_]
             ndcg = [user_result[1] for user_result in results_]
             hitrate = [user_result[2] for user_result in results_]

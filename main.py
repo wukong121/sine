@@ -138,7 +138,7 @@ def train(train_file, valid_file, test_file, log_path, best_model_path, similari
             start_time = time.time()
             while True:
                 try:
-                    hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment = train_data.next()  # (128,20), (128,20), (128,), (128,), (2,128,20)
+                    hist_item, nbr_mask, i_ids, user_id, hist_item_list_augment, _ = train_data.next()  # (128,20), (128,20), (128,), (128,), (2,128,20), (128,)
                 except StopIteration:
                     metrics = evaluate_full(sess, test_data, model, args)
                     for k in range(len(topk)):

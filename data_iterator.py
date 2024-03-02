@@ -77,6 +77,7 @@ class DataIterator:
     
     def __next__(self):
         item_time_list = []
+        item_raw = []
         if self.train_flag == 0:  # 训练模式
             if self.index + self.eval_batch_size > self.edge_count:
                 self.index = 0
@@ -93,6 +94,7 @@ class DataIterator:
             end_ = min(self.index + self.eval_batch_size, total_user)
             user_id_list = self.users[self.index: end_]
             item_id_list = [self.graph[user_][-1][1] for user_ in user_id_list]  # 获取每个用户最后交互过的那个物品
+            item_count = [len(self.graph[user_]) for user_ in user_id_list]  # number of each user's ineterated item
             self.index += self.eval_batch_size
 
         # item_id_list = []
@@ -106,6 +108,7 @@ class DataIterator:
                 k = item_list.index((user_id_list[i], item_id_list[i], item_time_list[i]))
             else:  # 测试模式
                 k = item_list.index(item_list[-1])
+                item_raw.append(item_)  # save the raw item sequence interacted by each user
             if k >= self.maxlen:
                 hist_item_list.append(item_[k-self.maxlen: k])
                 hist_mask_list.append([1.0] * self.maxlen)
@@ -124,7 +127,8 @@ class DataIterator:
         hist_item_list_augment.append(hist_item_list_aug1)
         hist_item_list_augment.append(hist_item_list_aug2)
 
-        return np.array(hist_item_list), np.array(hist_mask_list), np.array(item_id_list), np.array(user_id_list), np.array(hist_item_list_augment)
+        return np.array(hist_item_list), np.array(hist_mask_list), np.array(item_id_list), \
+            np.array(user_id_list), np.array(hist_item_list_augment), item_raw
 
     def align(self, seq):
         pad_len = self.maxlen - len(seq)

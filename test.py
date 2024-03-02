@@ -4,6 +4,7 @@ import os
 import tensorflow as tf
 import numpy as np
 
+from main import get_model
 from data_iterator import DataIterator
 from model_li import Model_SINE_LI
 from model_ssl import Model_SINE_SSL
@@ -20,12 +21,12 @@ parser.add_argument('--random_seed', type=int, default=19)
 parser.add_argument('--embedding_dim', type=int, default=128)
 parser.add_argument('--item_count', type=int, default=1000)
 parser.add_argument('--user_count', type=int, default=1000)
-parser.add_argument('--hidden_size', type=int, default=512)
+parser.add_argument('--hidden_size', type=int, default=128)
 parser.add_argument('--category_num', type=int, default=2)
 parser.add_argument('--topic_num', type=int, default=10)
 parser.add_argument('--neg_num', type=int, default=10)
 parser.add_argument('--cpt_feat', type=int, default=1)
-parser.add_argument('--model_type', type=str, default='SINE', help='SINE')
+parser.add_argument('--model_type', type=str, default='SINE', help='SINE|DNN|GRU4REC|MIND|ComiRec-DR|Model_ComiRec_SA')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='')
 parser.add_argument('--alpha', type=float, default=0.0, help='hyperparameter for interest loss (default: 0.0)')
 parser.add_argument('--beta', type=float, default=0.0, help='hyperparameter for contrastive loss (default: 0.0)')
@@ -41,7 +42,8 @@ parser.add_argument('--cate_norm', type=int, default=0)
 parser.add_argument('--n_head', type=int, default=1)
 parser.add_argument('--output_size', type=int, default=128)
 parser.add_argument('--experiment', type=int, default=0, \
-    help="0 for Long-Intent, "
+    help="-1 for Baselines, "
+        + "0 for Long-Intent, "
         + "1 for Self-supervised Learning, "
         + "2 for Long-Intent without gate unit and label attention, "
         + "3 for Long-Intent without gate unit, "
@@ -59,32 +61,13 @@ exp_dict = {
     4: ("li-nl", Model_SINE_LI_NL)
 }
 
-def get_model(dataset, model_type, item_count, user_count, args):
-    global exp_dict
-    if not model_type == 'SINE':
-        print("Invalid model_type : %s", model_type)
-        return
-    if args.experiment == 1:
-        model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
-                               args.topic_num, args.category_num, args.alpha, args.beta, args.neg_num, args.cpt_feat, 
-                               args.user_norm, args.item_norm, args.cate_norm, args.n_head)
-    else:
-        model = exp_dict[args.experiment][1](item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
-                        args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
-                        args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
-    return model
-
-def test(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args):
+def test(test_file, log_path, best_model_path, similarity_model_path, args):
     dataset = args.dataset
     batch_size = args.batch_size
     maxlen = args.maxlen
     item_count = args.item_count
     user_count = args.user_count
     model_type = args.model_type
-    topic_num = args.topic_num
-    concept_num = args.category_num
-    patience = args.patience
-    test_iter = args.test_iter
     topk = [10, 50, 100]
     tf.reset_default_graph()
     gpu_options = tf.GPUOptions(allow_growth=True)
@@ -98,7 +81,7 @@ def test(train_file, valid_file, test_file, log_path, best_model_path, similarit
             args.dataset, batch_size, maxlen, train_flag=1)
 
         metrics = evaluate_full(sess, test_data, model, args)
-        with open(log_path + '/evaluation_results_new.txt', 'w') as file:
+        with open(log_path + '/evaluation_results_man.txt', 'w') as file:
             for k in range(len(topk)):
                 result_str = '!!!! Test result topk=%d hitrate=%.4f ndcg=%.4f recall=%.4f \n' \
                     % (topk[k], metrics['hitrate'][k], metrics['ndcg'][k], metrics['recall'][k])
@@ -153,8 +136,9 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     print_configuration(args)
 
-    best_model_path = "/home/wangshengmin/workspace/SINE/log/ssl-2024-02-21 02:30/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.1"
+    # best_model_path = "/home/wangshengmin/workspace/SINE/log/ssl-2024-02-21 02:30/save_model/ml1m_SINE_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.1"
+    best_model_path = "/root/workspace/SINE_LOCAL/log/GRU4REC-baseline-2024-02-29 11:24/save_model/ml1m_GRU4REC_topic10_cept2_len20_neg10_unorm0_inorm0_catnorm0_head1_alpha0.0_beta0.0"
     log_path = os.path.dirname(os.path.dirname(best_model_path))
     similarity_model_path = "./data/ml1m/ml1m_ItemCF_IUF_similarity.pkl"
-    test(train_file, valid_file, test_file, log_path, best_model_path, similarity_model_path, args)
+    test(test_file, log_path, best_model_path, similarity_model_path, args)
     print('--> Finish!')
