@@ -13,6 +13,7 @@ from model_ssl_copy import Model_SINE_SSL
 from model_li_ngl import Model_SINE_LI_NGL
 from model_li_ng import Model_SINE_LI_NG
 from model_li_nl import Model_SINE_LI_NL
+from model_sine import Model_SINE
 from model_comirec import Model_DNN, Model_GRU4REC, Model_MIND, Model_ComiRec_DR, Model_ComiRec_SA
 from metrics_rs import evaluate_full
 
@@ -62,7 +63,8 @@ exp_dict = {
     1: ("ssl", Model_SINE_SSL), 
     2: ("li-ngl", Model_SINE_LI_NGL),
     3: ("li-ng", Model_SINE_LI_NG),
-    4: ("li-nl", Model_SINE_LI_NL)
+    4: ("li-nl", Model_SINE_LI_NL),
+    5: ("sine", Model_SINE)
 }
 
 def get_model(dataset, model_type, item_count, user_count, args):
@@ -71,6 +73,10 @@ def get_model(dataset, model_type, item_count, user_count, args):
         if args.experiment == 1:
             model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
                                 args.topic_num, args.category_num, args.alpha, args.beta, args.neg_num, args.cpt_feat, 
+                                args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+        elif args.experiment == 5:
+            model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
+                                args.topic_num, args.category_num, args.alpha, args.neg_num, args.cpt_feat, 
                                 args.user_norm, args.item_norm, args.cate_norm, args.n_head)
         else:
             model = exp_dict[args.experiment][1](item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
@@ -149,6 +155,8 @@ def train(train_file, valid_file, test_file, log_path, best_model_path, similari
                     loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, hist_item_list_augment)
                 elif args.experiment == -1:
                     loss, summary = model.train(sess, [user_id, i_ids, hist_item, nbr_mask, args.learning_rate])
+                elif args.experiment == 5:
+                    loss, summary = model.train(sess, hist_item, nbr_mask, i_ids)
                 else:
                     loss, summary = model.train(sess, hist_item, nbr_mask, i_ids, user_id)
                 loss_iter += loss

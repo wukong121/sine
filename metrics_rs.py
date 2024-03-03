@@ -486,7 +486,7 @@ def evaluate_full(sess, test_data, model, args):
         except StopIteration:
             break
         t1 = time.time()
-        if args.experiment == 1:
+        if args.experiment == 1 or args.experiment == 5:
             user_embs = model.output_user(sess, hist_item, nbr_mask)
         elif args.experiment == -1:
             user_embs = model.output_user(sess, [hist_item, nbr_mask])

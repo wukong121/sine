@@ -6,11 +6,6 @@ import numpy as np
 
 from main import get_model
 from data_iterator import DataIterator
-from model_li import Model_SINE_LI
-from model_ssl import Model_SINE_SSL
-from model_li_ngl import Model_SINE_LI_NGL
-from model_li_ng import Model_SINE_LI_NG
-from model_li_nl import Model_SINE_LI_NL
 from metrics_rs import evaluate_full
 
 parser = argparse.ArgumentParser()
@@ -52,14 +47,6 @@ parser.add_argument('--temperature', type=float, default=1.0, help="softmax temp
 parser.add_argument('--similarity_model_name', default='ItemCF_IUF', type=str, \
                         help="Method to generate item similarity score. choices: \
                         Random, ItemCF, ItemCF_IUF(Inverse user frequency), Item2Vec, LightGCN")
-
-exp_dict = {
-    0: ("li", Model_SINE_LI), 
-    1: ("ssl", Model_SINE_SSL), 
-    2: ("li-ngl", Model_SINE_LI_NGL),
-    3: ("li-ng", Model_SINE_LI_NG),
-    4: ("li-nl", Model_SINE_LI_NL)
-}
 
 def test(test_file, log_path, best_model_path, similarity_model_path, args):
     dataset = args.dataset
