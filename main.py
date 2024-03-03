@@ -8,12 +8,9 @@ import tensorflow as tf
 import numpy as np
 
 from data_iterator import DataIterator
-from model_li import Model_SINE_LI
-from model_ssl_copy import Model_SINE_SSL
-from model_li_ngl import Model_SINE_LI_NGL
-from model_li_ng import Model_SINE_LI_NG
-from model_li_nl import Model_SINE_LI_NL
 from model_sine import Model_SINE
+from model_ssl_copy import Model_SINE_SSL
+from model_longintent import Model_SINE_LI, Model_SINE_LI_NG,  Model_SINE_LI_NL, Model_SINE_LI_NGL
 from model_comirec import Model_DNN, Model_GRU4REC, Model_MIND, Model_ComiRec_DR, Model_ComiRec_SA
 from metrics_rs import evaluate_full
 
@@ -70,18 +67,18 @@ exp_dict = {
 def get_model(dataset, model_type, item_count, user_count, args):
     global exp_dict
     if model_type == 'SINE':
-        if args.experiment == 1:
+        if args.experiment == 1:  # ssl
             model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
                                 args.topic_num, args.category_num, args.alpha, args.beta, args.neg_num, args.cpt_feat, 
                                 args.user_norm, args.item_norm, args.cate_norm, args.n_head)
-        elif args.experiment == 5:
+        elif args.experiment == 5:  # sine
             model = exp_dict[args.experiment][1](item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen, 
                                 args.topic_num, args.category_num, args.alpha, args.neg_num, args.cpt_feat, 
                                 args.user_norm, args.item_norm, args.cate_norm, args.n_head)
-        else:
+        else:  # li
             model = exp_dict[args.experiment][1](item_count, user_count, args.embedding_dim, args.hidden_size, args.output_size,
                             args.batch_size, args.maxlen, args.topic_num, args.category_num, args.alpha, args.neg_num,
-                            args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head)
+                            args.cpt_feat, args.user_norm, args.item_norm, args.cate_norm, args.n_head, args.temperature)
     elif model_type == 'DNN': 
         model = Model_DNN(item_count, args.embedding_dim, args.hidden_size, args.batch_size, args.maxlen)
     elif model_type == 'GRU4REC': 
