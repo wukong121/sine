@@ -271,10 +271,7 @@ if __name__ == '__main__':
     shanghai_time = utc_now.replace(tzinfo=pytz.utc).astimezone(shanghai_tz).strftime("%Y-%m-%d %H:%M")
 
     log_path = "./log/{}-{}-".format(args.model_type, exp_dict[args.experiment][0])+shanghai_time
-    best_model_path = log_path + "/save_model/" + '%s' % args.dataset + '_%s' % args.model_type + '_topic%d' % args.topic_num \
-                      + '_cept%d' % args.category_num + '_len%d' % args.maxlen + '_neg%d' % args.neg_num \
-                      + '_unorm%d' % args.user_norm + '_inorm%d' % args.item_norm + '_catnorm%d' % args.cate_norm \
-                      + '_head%d' % args.n_head + '_alpha{}'.format(args.alpha) + '_beta{}'.format(args.beta)
+    best_model_path = log_path + "/save_model/" + '%s' % args.dataset + '_%s' % args.model_type
     similarity_model_path = os.path.join(path,\
         args.dataset+"_"+args.similarity_model_name+"_similarity.pkl")
     print("similarity_model_path = ", similarity_model_path)
