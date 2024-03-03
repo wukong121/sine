@@ -48,7 +48,8 @@ parser.add_argument('--experiment', type=int, default=0, \
         + "1 for Self-supervised Learning, "
         + "2 for Long-Intent without gate unit and label attention, "
         + "3 for Long-Intent without gate unit, "
-        + "4 for Long-Intent without label attention")
+        + "4 for Long-Intent without label attention, "
+        + "5 for Sine baseline")
 parser.add_argument('--temperature', type=float, default=1.0, help="softmax temperature (default:  1.0) - not studied.")
 parser.add_argument('--similarity_model_name', default='ItemCF_IUF', type=str, \
                         help="Method to generate item similarity score. choices: \
