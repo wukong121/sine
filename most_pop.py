@@ -55,6 +55,7 @@ class MostPopular:
 
 
 if __name__ == "__main__":
-    data = MostPopular('./data/book_data/book')
+    # data = MostPopular('./data/book_data/book')
+    data = MostPopular('./data/ml1m/ml1m')
     # data = MostPopular('./data/taobao_data/taobao')
     print(data.evaluate(50))
